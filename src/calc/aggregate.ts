@@ -1,4 +1,4 @@
-import type { Accum, Factor, SeqFactor } from "../types/Sequence";
+import type { Accum, Breakdown, Factor, SeqFactor } from "../types/Sequence";
 
 const accumulate = (factor: Factor, prevValue: number, value: number) => {
   if (factor === "plus") {
@@ -10,15 +10,18 @@ const accumulate = (factor: Factor, prevValue: number, value: number) => {
   }
 };
 
-const addBreakdown = (breakdown: Record<string, number>, factor: SeqFactor) => {
+const addBreakdown = (breakdown: Breakdown, factor: SeqFactor) => {
   if (factor.tag in breakdown) {
-    breakdown[factor.tag] = accumulate(
-      factor.factor,
-      breakdown[factor.tag],
-      factor.value,
-    );
+    breakdown[factor.tag] = {
+      ids: [...breakdown[factor.tag].ids, factor.id],
+      store: accumulate(
+        factor.factor,
+        breakdown[factor.tag].store,
+        factor.value,
+      )
+    };
   } else {
-    breakdown[factor.tag] = accumulate(factor.factor, 0, factor.value);
+    breakdown[factor.tag] = { ids: [factor.id], store: accumulate(factor.factor, 0, factor.value) };
   }
   return breakdown;
 };
@@ -38,11 +41,12 @@ export const aggregate = (
 
   let timePos = firstFactor.time;
   let accum: Accum = {
+    ids: [firstFactor.id],
     tags: [firstFactor.tag],
     time: timePos,
     store: accumulate(firstFactor.factor, baseValue, firstFactor.value),
     breakdown: {
-      [firstFactor.tag]: accumulate(firstFactor.factor, 0, firstFactor.value),
+      [firstFactor.tag]: { ids: [firstFactor.id], store: accumulate(firstFactor.factor, 0, firstFactor.value) },
     },
   };
 
@@ -55,6 +59,7 @@ export const aggregate = (
 
     if (timePos === seqFactor.time) {
       accum = {
+        ids: [...accum.ids, seqFactor.id],
         tags: Array.from(new Set([...accum.tags, seqFactor.tag])),
         time: timePos,
         store: accumulate(factor, prevValue, value),
@@ -64,11 +69,12 @@ export const aggregate = (
       accums.push(accum);
       const newTimePos = seqFactor.time;
       accum = {
+        ids: [seqFactor.id],
         tags: [seqFactor.tag],
         time: newTimePos,
         store: accumulate(factor, prevValue, value),
         breakdown: {
-          [seqFactor.tag]: accumulate(seqFactor.factor, 0, seqFactor.value),
+          [seqFactor.tag]: { ids: [seqFactor.id], store: accumulate(seqFactor.factor, 0, seqFactor.value) },
         },
       };
       timePos = newTimePos;

@@ -1,6 +1,7 @@
 export type Factor = "plus" | "minus";
 
 export type SeqFactor = {
+  id: string;
   tag: string;
   time: Date;
   value: number;
@@ -13,9 +14,12 @@ export type SeqSource = {
   baseValue: number;
 };
 
+export type Breakdown = Record<string, { store: number, ids: string[] }>
+
 export type Accum = {
+  ids: string[];
   tags: string[];
   time: Date;
   store: number;
-  breakdown: Record<string, number>;
+  breakdown: Breakdown;
 };
