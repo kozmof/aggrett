@@ -11,35 +11,35 @@ describe("basic test", () => {
 
     const sequence: SeqFactor[] = [
       {
-        id: '1',
+        id: "1",
         tag: "test",
         time: today,
         factor: "plus",
         value: 4,
       },
       {
-        id: '2',
+        id: "2",
         tag: "test",
         time: today,
         factor: "minus",
         value: 2,
       },
       {
-        id: '3',
+        id: "3",
         tag: "test",
         time: yesterday,
         factor: "plus",
         value: 10,
       },
       {
-        id: '4',
+        id: "4",
         tag: "test",
         time: tomorrow,
         factor: "minus",
         value: 3,
       },
       {
-        id: '5',
+        id: "5",
         tag: "other tag",
         time: tomorrow,
         factor: "minus",

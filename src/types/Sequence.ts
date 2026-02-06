@@ -14,7 +14,7 @@ export type SeqSource = {
   baseValue: number;
 };
 
-export type Breakdown = Record<string, { store: number, ids: string[] }>
+export type Breakdown = Record<string, { store: number; ids: string[] }>;
 
 export type Accum = {
   ids: string[];
