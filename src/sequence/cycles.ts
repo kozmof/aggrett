@@ -9,6 +9,56 @@ type IntervalType =
   | "months"
   | "years";
 
+const addInterval = (
+  date: Date,
+  step: number,
+  intervalType: IntervalType,
+): Date => {
+  const result = new Date(date);
+
+  switch (intervalType) {
+    case "seconds":
+      result.setSeconds(result.getSeconds() + step);
+      break;
+    case "minutes":
+      result.setMinutes(result.getMinutes() + step);
+      break;
+    case "hours":
+      result.setHours(result.getHours() + step);
+      break;
+    case "days":
+      result.setDate(result.getDate() + step);
+      break;
+    case "weeks":
+      result.setDate(result.getDate() + step * 7);
+      break;
+    case "months": {
+      const originalDay = result.getDate();
+      result.setMonth(result.getMonth() + step);
+      // Handle month overflow (e.g., Jan 31 + 1 month should be Feb 28/29, not Mar 2/3)
+      if (result.getDate() !== originalDay) {
+        result.setDate(0); // Set to last day of previous month
+      }
+      break;
+    }
+    case "years": {
+      const originalDay = result.getDate();
+      const originalMonth = result.getMonth();
+      result.setFullYear(result.getFullYear() + step);
+      // Handle leap year edge case (Feb 29 + 1 year should be Feb 28)
+      if (
+        result.getMonth() !== originalMonth ||
+        result.getDate() !== originalDay
+      ) {
+        result.setDate(0);
+      }
+      break;
+    }
+  }
+
+  return result;
+};
+
 const generateTimeSeries = (
   start: Date,
   end: Date,
@@ -19,31 +69,8 @@ const generateTimeSeries = (
   let current = new Date(start);
 
   while (current <= end) {
-    series.push(new Date(current));
-
-    switch (intervalType) {
-      case "seconds":
-        current.setSeconds(current.getSeconds() + step);
-        break;
-      case "minutes":
-        current.setMinutes(current.getMinutes() + step);
-        break;
-      case "hours":
-        current.setHours(current.getHours() + step);
-        break;
-      case "days":
-        current.setDate(current.getDate() + step);
-        break;
-      case "weeks":
-        current.setDate(current.getDate() + step * 7);
-        break;
-      case "months":
-        current.setMonth(current.getMonth() + step);
-        break;
-      case "years":
-        current.setFullYear(current.getFullYear() + step);
-        break;
-    }
+    series.push(current);
+    current = addInterval(current, step, intervalType);
   }
 
   return series;

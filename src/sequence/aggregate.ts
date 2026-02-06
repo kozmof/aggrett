@@ -11,25 +11,29 @@ const accumulate = (factor: Factor, prevValue: number, value: number) => {
   }
 };
 
-const addBreakdown = (breakdown: Breakdown, factor: SeqFactor) => {
-  if (factor.tag in breakdown) {
-    breakdown[factor.tag] = {
-      ids: [...breakdown[factor.tag].ids, factor.id],
-      store: accumulate(
-        factor.factor,
-        breakdown[factor.tag].store,
-        factor.value,
-      ),
-    };
-  } else {
-    breakdown[factor.tag] = {
-      ids: [factor.id],
-      store: accumulate(factor.factor, 0, factor.value),
-    };
-  }
-  return breakdown;
+const addBreakdown = (breakdown: Breakdown, factor: SeqFactor): Breakdown => {
+  const existing = breakdown[factor.tag];
+  return {
+    ...breakdown,
+    [factor.tag]: existing
+      ? {
+          ids: [...existing.ids, factor.id],
+          store: accumulate(factor.factor, existing.store, factor.value),
+        }
+      : {
+          ids: [factor.id],
+          store: accumulate(factor.factor, 0, factor.value),
+        },
+  };
 };
 
+/**
+ * Aggregates a sequence of factors into accumulated values over time.
+ * @param sequence - Array of sequence factors to aggregate
+ * @param baseValue - Initial value to start accumulation from
+ * @param filter - Tags to include. Empty array means include all tags (no filtering).
+ * @returns Array of accumulated values grouped by time
+ */
 export const aggregate = (
   sequence: SeqFactor[],
   baseValue: number,
@@ -42,11 +46,9 @@ export const aggregate = (
     (a, b) => a.time.getTime() - b.time.getTime(),
   );
 
-  // Apply filter consistently to all elements
+  // Apply filter: empty array = include all (no filtering), non-empty = whitelist
   const filtered =
-    filter.length > 0
-      ? sorted.filter((f) => filter.includes(f.tag))
-      : sorted;
+    filter.length > 0 ? sorted.filter((f) => filter.includes(f.tag)) : sorted;
 
   if (filtered.length < 1) return [];
 
