@@ -8,12 +8,6 @@ export type SeqFactor = {
   factor: Factor;
 };
 
-export type SeqSource = {
-  version: string;
-  sequence: SeqFactor[];
-  baseValue: number;
-};
-
 export type Breakdown = Record<string, { store: number; ids: string[] }>;
 
 export type Accum = {
