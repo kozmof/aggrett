@@ -1,26 +1,26 @@
 {
   "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.build.tsbuildinfo",
     "target": "ES2022",
     "useDefineForClassFields": true,
     "lib": ["ES2022"],
     "module": "ESNext",
-    "types": ["node"],
     "skipLibCheck": true,
 
     /* Bundler mode */
     "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",
-    "noEmit": true,
+
+    /* Emit declarations only */
+    "declaration": true,
+    "declarationDir": "./dist",
+    "emitDeclarationOnly": true,
 
     /* Linting */
     "strict": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "erasableSyntaxOnly": true,
-    "noFallthroughCasesInSwitch": true,
-    "noUncheckedSideEffectImports": true
+    "erasableSyntaxOnly": true
   },
-  "include": ["src", "vite.config.ts"]
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts"]
 }
