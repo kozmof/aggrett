@@ -11,3 +11,12 @@ export {
   updateFactor,
   mergeSequences,
 } from "./sequence/factors";
+export {
+  filterByTag,
+  extractTags,
+  groupByTag,
+  excludeByTag,
+  removeByTag,
+  renameTag,
+  accumulateByTag,
+} from "./sequence/tags";
