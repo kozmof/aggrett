@@ -10,6 +10,12 @@ export type SeqFactor = {
 
 export type Breakdown = Record<string, { store: number; ids: string[] }>;
 
+export type AccumCore = {
+  ids: string[];
+  time: Date;
+  store: number;
+};
+
 export type Accum = {
   ids: string[];
   tags: string[];

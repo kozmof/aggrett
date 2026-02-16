@@ -33,16 +33,3 @@ export const mergeSequences = (
 ): SeqFactor[] => {
   return [...a, ...b];
 };
-
-export const sliceByTimeRange = (
-  sequence: SeqFactor[],
-  start: Date,
-  end: Date,
-): SeqFactor[] => {
-  const startMs = start.getTime();
-  const endMs = end.getTime();
-  return sequence.filter((f) => {
-    const t = f.time.getTime();
-    return t >= startMs && t <= endMs;
-  });
-};

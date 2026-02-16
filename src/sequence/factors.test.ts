@@ -5,7 +5,6 @@ import {
   removeFactor,
   updateFactor,
   mergeSequences,
-  sliceByTimeRange,
 } from "./factors";
 
 const mockGenId = (() => {
@@ -176,61 +175,5 @@ describe("mergeSequences", () => {
 
     expect(a).toHaveLength(1);
     expect(b).toHaveLength(1);
-  });
-});
-
-describe("sliceByTimeRange", () => {
-  const seq: SeqFactor[] = [
-    makeFactor("a", "rent", "2024-01-01", 100),
-    makeFactor("b", "food", "2024-02-01", 50),
-    makeFactor("c", "rent", "2024-03-01", 100),
-    makeFactor("d", "food", "2024-04-01", 50),
-  ];
-
-  test("returns factors within the time range inclusive", () => {
-    const result = sliceByTimeRange(
-      seq,
-      new Date("2024-02-01"),
-      new Date("2024-03-01"),
-    );
-
-    expect(result).toHaveLength(2);
-    expect(result.map((f) => f.id)).toEqual(["b", "c"]);
-  });
-
-  test("includes factors exactly at boundaries", () => {
-    const result = sliceByTimeRange(
-      seq,
-      new Date("2024-01-01"),
-      new Date("2024-04-01"),
-    );
-
-    expect(result).toHaveLength(4);
-  });
-
-  test("returns empty array when no factors in range", () => {
-    const result = sliceByTimeRange(
-      seq,
-      new Date("2025-01-01"),
-      new Date("2025-12-31"),
-    );
-
-    expect(result).toHaveLength(0);
-  });
-
-  test("does not mutate the original array", () => {
-    sliceByTimeRange(seq, new Date("2024-02-01"), new Date("2024-03-01"));
-
-    expect(seq).toHaveLength(4);
-  });
-
-  test("works on an empty sequence", () => {
-    const result = sliceByTimeRange(
-      [],
-      new Date("2024-01-01"),
-      new Date("2024-12-31"),
-    );
-
-    expect(result).toHaveLength(0);
   });
 });

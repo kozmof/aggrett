@@ -1,15 +1,5 @@
-import type { Accum, Breakdown, Factor, SeqFactor } from "../types/Sequence";
-
-const accumulate = (factor: Factor, prevValue: number, value: number) => {
-  if (factor === "plus") {
-    return prevValue + value;
-  } else if (factor === "minus") {
-    return prevValue - value;
-  } else {
-    const _exhaustive: never = factor;
-    throw new Error(`Unknown factor type: ${_exhaustive}`);
-  }
-};
+import type { Accum, Breakdown, SeqFactor } from "../types/Sequence";
+import { accumulate } from "./accumulate";
 
 const addBreakdown = (breakdown: Breakdown, factor: SeqFactor): Breakdown => {
   const existing = breakdown[factor.tag];
