@@ -1,31 +1,5 @@
 package aggrep
 
-import "sort"
-
-// groupByTime copies sequence, sorts by time, and returns slices of same-time factors.
-func groupByTime(sequence []SeqFactor) [][]SeqFactor {
-	if len(sequence) == 0 {
-		return nil
-	}
-	sorted := make([]SeqFactor, len(sequence))
-	copy(sorted, sequence)
-	sort.SliceStable(sorted, func(i, j int) bool {
-		return sorted[i].Time.Before(sorted[j].Time)
-	})
-
-	var groups [][]SeqFactor
-	var current []SeqFactor
-	for _, f := range sorted {
-		if len(current) == 0 || current[0].Time.Equal(f.Time) {
-			current = append(current, f)
-		} else {
-			groups = append(groups, current)
-			current = []SeqFactor{f}
-		}
-	}
-	return append(groups, current)
-}
-
 // Aggregate groups factors by time and returns running totals with per-time breakdown.
 // If filter is empty, all tags are included. Otherwise only listed tags are included.
 func Aggregate(sequence []SeqFactor, baseValue float64, filter []string) []Accum {
