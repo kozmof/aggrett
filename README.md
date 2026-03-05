@@ -1,2 +1,1 @@
 # aggrett
-sequence aggregation toolkit.
