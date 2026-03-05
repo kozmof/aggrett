@@ -15,6 +15,16 @@ const (
 	IntervalYears   IntervalType = "years"
 )
 
+// IsValid reports whether t is a known IntervalType.
+func (t IntervalType) IsValid() bool {
+	switch t {
+	case IntervalSeconds, IntervalMinutes, IntervalHours,
+		IntervalDays, IntervalWeeks, IntervalMonths, IntervalYears:
+		return true
+	}
+	return false
+}
+
 // AddInterval adds an interval to a date with JS-like month/year overflow behavior.
 func AddInterval(date time.Time, step int, intervalType IntervalType) time.Time {
 	switch intervalType {
@@ -47,10 +57,9 @@ func addMonthsWithOverflowClamp(date time.Time, step int) time.Time {
 }
 
 func addYearsWithOverflowClamp(date time.Time, step int) time.Time {
-	originalDay := date.Day()
 	originalMonth := date.Month()
 	candidate := date.AddDate(step, 0, 0)
-	if candidate.Month() != originalMonth || candidate.Day() != originalDay {
+	if candidate.Month() != originalMonth {
 		return lastDayOfPreviousMonth(candidate)
 	}
 	return candidate
@@ -84,16 +93,11 @@ func GenerateTimeSeries(start, end time.Time, step int, intervalType IntervalTyp
 
 // SliceByTimeRange filters sequence by inclusive time bounds.
 func SliceByTimeRange(sequence []SeqFactor, start, end time.Time) []SeqFactor {
-	startUnix := start.UnixMilli()
-	endUnix := end.UnixMilli()
 	result := make([]SeqFactor, 0)
-
 	for _, f := range sequence {
-		t := f.Time.UnixMilli()
-		if t >= startUnix && t <= endUnix {
+		if !f.Time.Before(start) && !f.Time.After(end) {
 			result = append(result, f)
 		}
 	}
-
 	return result
 }

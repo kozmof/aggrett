@@ -10,6 +10,11 @@ const (
 	FactorMinus Factor = "minus"
 )
 
+// IsValid reports whether f is a known Factor.
+func (f Factor) IsValid() bool {
+	return f == FactorPlus || f == FactorMinus
+}
+
 // SeqFactor is a single tagged value change at a specific time.
 type SeqFactor struct {
 	ID     string
@@ -20,8 +25,9 @@ type SeqFactor struct {
 }
 
 // BreakdownEntry stores per-tag accumulation for a single time bucket.
+// Delta is the net contribution of this tag within that bucket, not a cumulative total.
 type BreakdownEntry struct {
-	Store float64
+	Delta float64
 	IDs   []string
 }
 

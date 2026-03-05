@@ -68,6 +68,16 @@ func UpdateFactor(sequence []SeqFactor, id string, fields SeqFactorUpdate) []Seq
 	return result
 }
 
+// FindByID returns the first factor with the given ID and true, or a zero value and false.
+func FindByID(sequence []SeqFactor, id string) (SeqFactor, bool) {
+	for _, f := range sequence {
+		if f.ID == id {
+			return f, true
+		}
+	}
+	return SeqFactor{}, false
+}
+
 // MergeSequences concatenates two sequences.
 func MergeSequences(a, b []SeqFactor) []SeqFactor {
 	result := make([]SeqFactor, 0, len(a)+len(b))
