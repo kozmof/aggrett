@@ -1,4 +1,4 @@
-package aggrep
+package aggrett
 
 // Aggregate groups factors by time and returns running totals with per-time breakdown.
 // If filter is empty, all tags are included. Otherwise only listed tags are included.

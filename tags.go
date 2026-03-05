@@ -1,4 +1,4 @@
-package aggrep
+package aggrett
 
 // FilterByTag keeps factors whose tags match the provided list.
 func FilterByTag(sequence []SeqFactor, tags []string) []SeqFactor {

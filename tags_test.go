@@ -1,4 +1,4 @@
-package aggrep
+package aggrett
 
 import (
 	"reflect"
