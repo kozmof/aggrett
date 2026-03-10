@@ -76,3 +76,9 @@ func RenameTag(sequence []SeqFactor, oldTag, newTag string) []SeqFactor {
 func AccumulateByTag(sequence []SeqFactor, baseValue float64, tag string) []AccumCore {
 	return AccumulateSequence(FilterByTag(sequence, []string{tag}), baseValue)
 }
+
+// AccumulateByTagByInterval accumulates factors for a tag into interval buckets.
+// Result times are the start of each bucket.
+func AccumulateByTagByInterval(sequence []SeqFactor, baseValue float64, tag string, step int, intervalType IntervalType) []AccumCore {
+	return AccumulateSequenceByInterval(FilterByTag(sequence, []string{tag}), baseValue, step, intervalType)
+}

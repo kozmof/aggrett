@@ -308,3 +308,22 @@ func TestAccumulateByTag(t *testing.T) {
 		}
 	})
 }
+
+func TestAccumulateByTagByInterval(t *testing.T) {
+	seq := []SeqFactor{
+		makeTagFactor(t, "1", "food", "2024-01-05T10:00:00", 200, FactorMinus),
+		makeTagFactor(t, "2", "food", "2024-01-05T18:00:00", 50, FactorMinus),
+		makeTagFactor(t, "3", "rent", "2024-01-05T12:00:00", 1000, FactorMinus),
+		makeTagFactor(t, "4", "food", "2024-01-06T09:00:00", 25, FactorMinus),
+	}
+
+	result := AccumulateByTagByInterval(seq, 0, "food", 1, IntervalDays)
+	if len(result) != 2 {
+		t.Fatalf("got %d items want 2", len(result))
+	}
+	mustTimeEqual(t, result[0].Time, mustParseDate(t, "2024-01-05"))
+	mustTimeEqual(t, result[1].Time, mustParseDate(t, "2024-01-06"))
+	if result[0].Store != -250 || result[1].Store != -275 {
+		t.Fatalf("unexpected result %#v", result)
+	}
+}

@@ -133,3 +133,68 @@ func TestAccumulateSequence(t *testing.T) {
 		}
 	})
 }
+
+func TestAccumulateSequenceByInterval(t *testing.T) {
+	t.Run("groups factors into 15 second buckets", func(t *testing.T) {
+		sequence := []SeqFactor{
+			{ID: "1", Tag: "a", Time: mustParseDate(t, "2024-01-01T10:00:14"), Factor: FactorPlus, Value: 10},
+			{ID: "2", Tag: "a", Time: mustParseDate(t, "2024-01-01T10:00:01"), Factor: FactorPlus, Value: 5},
+			{ID: "3", Tag: "a", Time: mustParseDate(t, "2024-01-01T10:00:15"), Factor: FactorMinus, Value: 2},
+			{ID: "4", Tag: "a", Time: mustParseDate(t, "2024-01-01T10:00:29"), Factor: FactorPlus, Value: 3},
+		}
+
+		result := AccumulateSequenceByInterval(sequence, 0, 15, IntervalSeconds)
+
+		if len(result) != 2 {
+			t.Fatalf("got %d items want 2", len(result))
+		}
+		mustTimeEqual(t, result[0].Time, mustParseDate(t, "2024-01-01T10:00:00"))
+		mustTimeEqual(t, result[1].Time, mustParseDate(t, "2024-01-01T10:00:15"))
+		if result[0].Store != 15 || result[1].Store != 16 {
+			t.Fatalf("unexpected stores %#v", []float64{result[0].Store, result[1].Store})
+		}
+		if len(result[0].IDs) != 2 || result[0].IDs[0] != "2" || result[0].IDs[1] != "1" {
+			t.Fatalf("unexpected first bucket ids %#v", result[0].IDs)
+		}
+	})
+
+	t.Run("groups factors into 8 minute buckets", func(t *testing.T) {
+		sequence := []SeqFactor{
+			{ID: "1", Tag: "a", Time: mustParseDate(t, "2024-01-01T10:00:00"), Factor: FactorPlus, Value: 10},
+			{ID: "2", Tag: "a", Time: mustParseDate(t, "2024-01-01T10:07:59"), Factor: FactorPlus, Value: 5},
+			{ID: "3", Tag: "a", Time: mustParseDate(t, "2024-01-01T10:08:00"), Factor: FactorMinus, Value: 3},
+			{ID: "4", Tag: "a", Time: mustParseDate(t, "2024-01-01T10:16:00"), Factor: FactorPlus, Value: 2},
+		}
+
+		result := AccumulateSequenceByInterval(sequence, 0, 8, IntervalMinutes)
+
+		if len(result) != 3 {
+			t.Fatalf("got %d items want 3", len(result))
+		}
+		mustTimeEqual(t, result[0].Time, mustParseDate(t, "2024-01-01T10:00:00"))
+		mustTimeEqual(t, result[1].Time, mustParseDate(t, "2024-01-01T10:08:00"))
+		mustTimeEqual(t, result[2].Time, mustParseDate(t, "2024-01-01T10:16:00"))
+		if result[0].Store != 15 || result[1].Store != 12 || result[2].Store != 14 {
+			t.Fatalf("unexpected stores %#v", []float64{result[0].Store, result[1].Store, result[2].Store})
+		}
+	})
+
+	t.Run("groups factors into daily buckets", func(t *testing.T) {
+		sequence := []SeqFactor{
+			{ID: "1", Tag: "a", Time: mustParseDate(t, "2024-01-01T01:00:00"), Factor: FactorPlus, Value: 10},
+			{ID: "2", Tag: "a", Time: mustParseDate(t, "2024-01-01T23:59:59"), Factor: FactorMinus, Value: 2},
+			{ID: "3", Tag: "a", Time: mustParseDate(t, "2024-01-02T00:00:00"), Factor: FactorPlus, Value: 5},
+		}
+
+		result := AccumulateSequenceByInterval(sequence, 0, 1, IntervalDays)
+
+		if len(result) != 2 {
+			t.Fatalf("got %d items want 2", len(result))
+		}
+		mustTimeEqual(t, result[0].Time, mustParseDate(t, "2024-01-01"))
+		mustTimeEqual(t, result[1].Time, mustParseDate(t, "2024-01-02"))
+		if result[0].Store != 8 || result[1].Store != 13 {
+			t.Fatalf("unexpected stores %#v", []float64{result[0].Store, result[1].Store})
+		}
+	})
+}

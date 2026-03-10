@@ -56,3 +56,35 @@ func TestAggregate(t *testing.T) {
 		t.Fatalf("accum[2].breakdown[other tag].ids got %#v want [5]", accum[2].Breakdown["other tag"].IDs)
 	}
 }
+
+func TestAggregateByInterval(t *testing.T) {
+	sequence := []SeqFactor{
+		{ID: "1", Tag: "rent", Time: mustParseDate(t, "2024-01-15"), Factor: FactorPlus, Value: 10},
+		{ID: "2", Tag: "food", Time: mustParseDate(t, "2024-04-30"), Factor: FactorMinus, Value: 2},
+		{ID: "3", Tag: "rent", Time: mustParseDate(t, "2024-05-01"), Factor: FactorPlus, Value: 7},
+		{ID: "4", Tag: "food", Time: mustParseDate(t, "2024-08-31"), Factor: FactorPlus, Value: 1},
+		{ID: "5", Tag: "rent", Time: mustParseDate(t, "2024-09-01"), Factor: FactorMinus, Value: 3},
+	}
+
+	accum := AggregateByInterval(sequence, 0, nil, 4, IntervalMonths)
+	if len(accum) != 3 {
+		t.Fatalf("got %d items want 3", len(accum))
+	}
+
+	mustTimeEqual(t, accum[0].Time, mustParseDate(t, "2024-01-01"))
+	mustTimeEqual(t, accum[1].Time, mustParseDate(t, "2024-05-01"))
+	mustTimeEqual(t, accum[2].Time, mustParseDate(t, "2024-09-01"))
+
+	if accum[0].Store != 8 || accum[1].Store != 16 || accum[2].Store != 13 {
+		t.Fatalf("unexpected stores %#v", []float64{accum[0].Store, accum[1].Store, accum[2].Store})
+	}
+	if accum[0].Breakdown["rent"].Delta != 10 || accum[0].Breakdown["food"].Delta != -2 {
+		t.Fatalf("unexpected first breakdown %#v", accum[0].Breakdown)
+	}
+	if accum[1].Breakdown["rent"].Delta != 7 || accum[1].Breakdown["food"].Delta != 1 {
+		t.Fatalf("unexpected second breakdown %#v", accum[1].Breakdown)
+	}
+	if accum[2].Breakdown["rent"].Delta != -3 {
+		t.Fatalf("unexpected third breakdown %#v", accum[2].Breakdown)
+	}
+}

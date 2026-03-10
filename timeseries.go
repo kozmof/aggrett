@@ -1,6 +1,9 @@
 package aggrett
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 // IntervalType defines supported interval units.
 type IntervalType string
@@ -14,6 +17,22 @@ const (
 	IntervalMonths  IntervalType = "months"
 	IntervalYears   IntervalType = "years"
 )
+
+// timeGrouping describes interval-based bucketing for accumulation and aggregation.
+// Result times are the start of each bucket.
+type timeGrouping struct {
+	Step         int
+	IntervalType IntervalType
+}
+
+func (g timeGrouping) validate() {
+	if g.Step <= 0 {
+		panic(fmt.Sprintf("grouping step must be positive: %d", g.Step))
+	}
+	if !g.IntervalType.IsValid() {
+		panic(fmt.Sprintf("unknown interval type: %q", g.IntervalType))
+	}
+}
 
 // IsValid reports whether t is a known IntervalType.
 func (t IntervalType) IsValid() bool {
@@ -44,6 +63,37 @@ func AddInterval(date time.Time, step int, intervalType IntervalType) time.Time 
 		return addYearsWithOverflowClamp(date, step)
 	default:
 		panic("unknown interval type")
+	}
+}
+
+func bucketStart(date time.Time, grouping timeGrouping) time.Time {
+	grouping.validate()
+
+	switch grouping.IntervalType {
+	case IntervalSeconds:
+		second := date.Second() - date.Second()%grouping.Step
+		return time.Date(date.Year(), date.Month(), date.Day(), date.Hour(), date.Minute(), second, 0, date.Location())
+	case IntervalMinutes:
+		minute := date.Minute() - date.Minute()%grouping.Step
+		return time.Date(date.Year(), date.Month(), date.Day(), date.Hour(), minute, 0, 0, date.Location())
+	case IntervalHours:
+		hour := date.Hour() - date.Hour()%grouping.Step
+		return time.Date(date.Year(), date.Month(), date.Day(), hour, 0, 0, 0, date.Location())
+	case IntervalDays:
+		day := ((date.Day() - 1) / grouping.Step * grouping.Step) + 1
+		return time.Date(date.Year(), date.Month(), day, 0, 0, 0, 0, date.Location())
+	case IntervalWeeks:
+		offset := ((date.YearDay() - 1) / (grouping.Step * 7)) * grouping.Step * 7
+		start := time.Date(date.Year(), time.January, 1, 0, 0, 0, 0, date.Location())
+		return start.AddDate(0, 0, offset)
+	case IntervalMonths:
+		month := ((int(date.Month()) - 1) / grouping.Step * grouping.Step) + 1
+		return time.Date(date.Year(), time.Month(month), 1, 0, 0, 0, 0, date.Location())
+	case IntervalYears:
+		year := ((date.Year() - 1) / grouping.Step * grouping.Step) + 1
+		return time.Date(year, time.January, 1, 0, 0, 0, 0, date.Location())
+	default:
+		panic(fmt.Sprintf("unknown interval type: %q", grouping.IntervalType))
 	}
 }
 
