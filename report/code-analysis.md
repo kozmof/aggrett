@@ -1,6 +1,6 @@
 # Code Analysis: `aggrett`
 
-**Date:** 2026-03-11
+**Date:** 2026-03-13
 **Module:** `github.com/kozmof/aggrett`
 **Language:** Go 1.26
 
@@ -69,7 +69,7 @@ IntervalType (string)
 timeGrouping (unexported)
   ├─ Step         int
   └─ IntervalType IntervalType
-  └─ validate()
+  └─ validate() error
 
 timeGroup (unexported)
   ├─ Time    time.Time
@@ -84,31 +84,37 @@ timeGroup (unexported)
 
 ```
 Public API
-├─ Aggregate(sequence, base, filter)
+├─ Aggregate(sequence, base, filter) ([]Accum, error)
 │   └─ aggregate(sequence, base, filter, nil)
 │       ├─ FilterByTag (if filter non-empty)
 │       ├─ groupByTime(filtered, nil)
 │       │   └─ sort.SliceStable
-│       └─ Accumulate (per factor)
+│       └─ Accumulate (per factor) → error on unknown Factor
 │
-├─ AggregateByInterval(sequence, base, filter, step, intervalType)
+├─ AggregateByInterval(sequence, base, filter, step, intervalType) ([]Accum, error)
 │   └─ aggregate(..., &timeGrouping{...})
 │       └─ groupByTime(filtered, grouping)
-│           └─ bucketStart(f.Time, grouping)
-│               └─ timeGrouping.validate()
+│           └─ bucketStart(f.Time, grouping) → error on invalid grouping
+│               └─ timeGrouping.validate() → error
 │
-├─ AccumulateSequence(sequence, base)
+├─ AccumulateSequence(sequence, base) ([]AccumCore, error)
 │   └─ accumulateSequence(sequence, base, nil)
 │       └─ groupByTime + Accumulate
 │
-├─ AccumulateSequenceByInterval(sequence, base, step, intervalType)
+├─ AccumulateSequenceByInterval(sequence, base, step, intervalType) ([]AccumCore, error)
 │   └─ accumulateSequence(..., &timeGrouping{...})
 │
-├─ AccumulateByTag(sequence, base, tag)
+├─ AccumulateByTag(sequence, base, tag) ([]AccumCore, error)
 │   └─ FilterByTag → AccumulateSequence
 │
-├─ AccumulateByTagByInterval(sequence, base, tag, step, intervalType)
+├─ AccumulateByTagByInterval(sequence, base, tag, step, intervalType) ([]AccumCore, error)
 │   └─ FilterByTag → AccumulateSequenceByInterval
+│
+├─ InsertFactor(sequence, tag, time, value, factor, genID) ([]SeqFactor, error)
+│   └─ factor.IsValid() → error on invalid Factor
+│
+├─ UpdateFactor(sequence, id, fields) ([]SeqFactor, error)
+│   └─ fields.Factor.IsValid() → error on invalid Factor (when non-nil)
 │
 └─ CreateCycles(start, end, step, intervalType, factor, value, tag, genID)
     └─ GenerateTimeSeries(start, end, step, intervalType)
@@ -126,8 +132,8 @@ The library is designed for **personal finance / budgeting scenarios** (test dat
 
 ```go
 // 1. Build a sequence
-seq := aggrett.InsertFactor(nil, "salary", time.Now(), 5000, aggrett.FactorPlus, uuid.NewString)
-seq = aggrett.InsertFactor(seq, "rent",   rentDate, 1000, aggrett.FactorMinus, uuid.NewString)
+seq, err := aggrett.InsertFactor(nil, "salary", time.Now(), 5000, aggrett.FactorPlus, uuid.NewString)
+seq, err = aggrett.InsertFactor(seq, "rent", rentDate, 1000, aggrett.FactorMinus, uuid.NewString)
 
 // 2. Generate recurring events
 cycles := aggrett.CreateCycles(start, end, 1, aggrett.IntervalMonths,
@@ -135,28 +141,23 @@ cycles := aggrett.CreateCycles(start, end, 1, aggrett.IntervalMonths,
 seq = aggrett.MergeSequences(seq, cycles)
 
 // 3. Aggregate
-result := aggrett.Aggregate(seq, 0, nil)
+result, err := aggrett.Aggregate(seq, 0, nil)
 // or by time bucket:
-result := aggrett.AggregateByInterval(seq, 0, nil, 1, aggrett.IntervalMonths)
+result, err := aggrett.AggregateByInterval(seq, 0, nil, 1, aggrett.IntervalMonths)
 
 // 4. Tag-scoped view
-rentOnly := aggrett.AccumulateByTag(seq, 0, "rent")
+rentOnly, err := aggrett.AccumulateByTag(seq, 0, "rent")
 ```
 
 ---
 
 ## 5. Pitfalls
 
-### 5a. `Accumulate` panics on unknown `Factor`
-[sequence.go:21](../sequence.go#L21) — An unvalidated `Factor` value (e.g. loaded from JSON/DB) will panic at runtime. `Factor.IsValid()` exists but is not called internally before dispatch.
+### ~~5a. `Accumulate` panics on unknown `Factor`~~ — Fixed
+`Accumulate` now returns `(float64, error)` instead of panicking. `InsertFactor` and `UpdateFactor` validate the `Factor` field at the boundary and return `([]SeqFactor, error)`, so well-formed sequences never reach `Accumulate` with an invalid factor.
 
-```go
-// If f.Factor = "plus " (note trailing space), this panics:
-store = Accumulate(f.Factor, store, f.Value)
-```
-
-### 5b. `timeGrouping.validate()` panics instead of returning errors
-[timeseries.go:28-35](../timeseries.go#L28) — Validation panics are called deep inside `groupByTime` → `bucketStart`. There is no way to surface these as structured errors to callers.
+### ~~5b. `timeGrouping.validate()` panics instead of returning errors~~ — Fixed
+`validate()` now returns `error`. `bucketStart` returns `(time.Time, error)`. The error propagates up through `groupByTime` → `accumulateSequence` / `aggregate` → all public interval-based functions, which now return errors.
 
 ### 5c. Day bucket math is calendar-month-relative, not epoch-relative
 [timeseries.go:83-84](../timeseries.go#L83) — `IntervalDays` buckets are calculated as `((day-1)/step*step)+1` within the current month. A `step=3` bucket in January and February start fresh each month. Cross-month multi-day buckets do **not** form a global grid.
@@ -173,17 +174,17 @@ store = Accumulate(f.Factor, store, f.Value)
 ### 5g. ID uniqueness is assumed but not enforced
 `InsertFactor` delegates ID generation to the caller via `genID func() string`. `UpdateFactor` silently matches only the first occurrence if IDs are duplicated (due to early `continue` logic). `RemoveFactor` will remove **all** factors with a matching ID from the set if duplicates exist.
 
-### 5h. `timePtr` test helper is defined but never used
-[test_helpers_test.go:37](../test_helpers_test.go#L37) — `func timePtr(v time.Time) *time.Time` is declared but not referenced in any test.
+### ~~5h. `timePtr` test helper is defined but never used~~ — Fixed
+Removed from `test_helpers_test.go`.
 
-### 5i. Duplicate factory helpers across test files
-`makeFactor` ([factors_test.go:9](../factors_test.go#L9)) and `makeTagFactor` ([tags_test.go:8](../tags_test.go#L8)) are nearly identical. Both are in `package aggrett` (internal tests) and compile together, so they co-exist — but the duplication adds maintenance burden.
+### ~~5i. Duplicate factory helpers across test files~~ — Fixed
+`makeFactor` and `makeTagFactor` have been removed and consolidated into a single `makeSeqFactor` in `test_helpers_test.go`, used by all test files.
 
 ---
 
 ## 6. Improvement Points: Design Overview
 
-1. **Return errors instead of panicking.** Both `Accumulate` and `bucketStart` should return `(float64, error)` / `(time.Time, error)`. Go's idiom is explicit error handling; panics are for programmer errors only. Consumers calling these from user-supplied data have no recovery path.
+1. ~~**Return errors instead of panicking.**~~ **Done.** `Accumulate`, `bucketStart`, and `validate` now return errors. All public accumulation and aggregation functions return `(result, error)`. Factor validation is enforced at `InsertFactor` / `UpdateFactor`.
 
 2. **Expose `TimeGrouping` as a public type.** The `step int, intervalType IntervalType` pair is repeated in every interval-based function signature. A public `TimeGrouping` struct would allow callers to build it once and reuse, and simplify the API surface.
 
@@ -213,7 +214,7 @@ store = Accumulate(f.Factor, store, f.Value)
 
 1. **`InsertFactor` pre-allocation** ([factors.go:14-16](../factors.go#L14)) — creates a new slice of `cap = len+1`, copies, then appends. This is equivalent to `append(sequence, newElem)` on a copied slice. The explicit pre-allocation is clear but verbose; using `append(append([]SeqFactor{}, sequence...), newElem)` is idiomatic.
 
-2. **`tags` slice in `aggregate`** ([aggregate.go:33](../aggregate.go#L33)) — initialized with `make([]string, 0)` while `ids` uses `make([]string, 0, len(group.Factors))`. Since `tags` is bounded by unique tags per group (at most `len(group.Factors)`), the same capacity hint applies.
+2. ~~**`tags` slice in `aggregate`**~~ **Done.** `tags` now uses `make([]string, 0, len(group.Factors))` matching the capacity hint already used for `ids`.
 
 3. **`GenerateTimeSeries` cannot pre-allocate** ([timeseries.go:133](../timeseries.go#L133)) — because month/year overflow clamping means consecutive intervals may land on the same date, the result count isn't knowable upfront. This is acceptable but worth documenting.
 
@@ -221,7 +222,7 @@ store = Accumulate(f.Factor, store, f.Value)
 
 5. **`lastDayOfPreviousMonth` preserves time-of-day** ([timeseries.go:118-129](../timeseries.go#L118)) — the clamped date keeps the original `Hour`, `Minute`, `Second`, `Nanosecond`. For `AddInterval`, this is intentional, but it makes the function less obviously a "date boundary" utility.
 
-6. **`RemoveByTag` alias** ([tags.go:59-61](../tags.go#L59)) — two names for the same operation add cognitive overhead. If the alias is kept for backwards compatibility, a deprecation comment would help; otherwise, consider removing one.
+6. ~~**`RemoveByTag` alias**~~ **Done.** A `// Deprecated: Use ExcludeByTag instead.` comment has been added to `RemoveByTag`.
 
 ---
 
@@ -244,7 +245,7 @@ store = Accumulate(f.Factor, store, f.Value)
 - **Two result types:** Know when `AccumCore` (simple running total) vs `Accum` (with per-tag breakdown) is appropriate.
 - **Bucket alignment math:** Understand how `bucketStart` maps a timestamp to its bucket start for each `IntervalType`, especially the day/week edge cases.
 - **Overflow clamping:** Understand `addMonthsWithOverflowClamp` and why monthly cycles from the 31st drift.
-- **Panic contract:** Currently `Accumulate` and `bucketStart` panic on invalid input. Any extension must maintain or replace this contract consistently.
+- **Error contract:** `Accumulate`, `bucketStart`, `InsertFactor`, and `UpdateFactor` return errors on invalid input. All public accumulation and aggregation functions propagate these errors.
 
 ---
 
@@ -254,7 +255,7 @@ store = Accumulate(f.Factor, store, f.Value)
 |---|---|---|
 | Correctness | High | Well-tested; immutability enforced |
 | API clarity | Medium | Two result types; repeated `step/intervalType` params |
-| Error handling | Low | Panics instead of errors throughout |
+| Error handling | **Medium** | **Panics replaced with errors throughout; Factor validated at insertion boundaries** |
 | Performance | Medium | O(n) find/update; no indexing |
-| Test coverage | High | All public functions covered with edge cases |
+| Test coverage | High | All public functions covered with edge cases; error paths now tested |
 | Extensibility | Medium | Unexported `timeGrouping` limits reuse |
