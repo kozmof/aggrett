@@ -9,13 +9,19 @@ func Aggregate(sequence []SeqFactor, baseValue float64, filter []string) ([]Accu
 // AggregateByInterval groups factors into interval buckets and returns running totals with per-bucket breakdown.
 // Result times are the start of each bucket.
 func AggregateByInterval(sequence []SeqFactor, baseValue float64, filter []string, step int, intervalType IntervalType) ([]Accum, error) {
-	return aggregate(sequence, baseValue, filter, &timeGrouping{
+	return aggregate(sequence, baseValue, filter, &TimeGrouping{
 		Step:         step,
 		IntervalType: intervalType,
 	})
 }
 
-func aggregate(sequence []SeqFactor, baseValue float64, filter []string, grouping *timeGrouping) ([]Accum, error) {
+// AggregateByGrouping is like AggregateByInterval but accepts a pre-built TimeGrouping,
+// allowing callers to construct and validate it once and reuse.
+func AggregateByGrouping(sequence []SeqFactor, baseValue float64, filter []string, grouping TimeGrouping) ([]Accum, error) {
+	return aggregate(sequence, baseValue, filter, &grouping)
+}
+
+func aggregate(sequence []SeqFactor, baseValue float64, filter []string, grouping *TimeGrouping) ([]Accum, error) {
 	filtered := sequence
 	if len(filter) > 0 {
 		filtered = FilterByTag(sequence, filter)
@@ -61,10 +67,8 @@ func aggregate(sequence []SeqFactor, baseValue float64, filter []string, groupin
 		}
 
 		result = append(result, Accum{
-			IDs:       ids,
+			AccumCore: AccumCore{IDs: ids, Time: group.Time, Store: store},
 			Tags:      tags,
-			Time:      group.Time,
-			Store:     store,
 			Breakdown: breakdown,
 		})
 	}

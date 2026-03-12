@@ -19,7 +19,9 @@ The library is a pure Go package with no external dependencies. It implements a 
 | `timeseries.go` | Interval types, bucket math, time series generation |
 | `aggregate.go` | Thin facade: `Aggregate` / `AggregateByInterval` returning rich `Accum` |
 
-**Internal types** (unexported): `timeGroup`, `timeGrouping`
+**Internal types** (unexported): `timeGroup`
+
+**Exported types added**: `TimeGrouping`, `Index`, `Accumulated` interface
 
 The library enforces an **immutable-sequence contract**: every mutation function returns a new `[]SeqFactor` without modifying the input. This is consistently validated across the test suite.
 
@@ -45,17 +47,20 @@ SeqFactorUpdate          (partial patch; pointer fields = optional)
   ├─ Value  *float64
   └─ Factor *Factor
 
-AccumCore                (flat accumulation result)
+AccumCore                (flat accumulation result — implements Accumulated)
   ├─ IDs   []string
   ├─ Time  time.Time
   └─ Store float64
 
-Accum                    (rich accumulation result)
-  ├─ IDs       []string
+Accum                    (rich accumulation result — implements Accumulated)
+  ├─ AccumCore (embedded)
   ├─ Tags      []string
-  ├─ Time      time.Time
-  ├─ Store     float64
   └─ Breakdown Breakdown
+
+Accumulated (interface)
+  ├─ GetIDs()   []string
+  ├─ GetTime()  time.Time
+  └─ GetStore() float64
 
 Breakdown = map[string]BreakdownEntry
 BreakdownEntry
@@ -66,17 +71,21 @@ IntervalType (string)
   └─ Seconds / Minutes / Hours / Days / Weeks / Months / Years
   └─ IsValid() bool
 
-timeGrouping (unexported)
+TimeGrouping (exported)
   ├─ Step         int
   └─ IntervalType IntervalType
   └─ validate() error
+
+Index (exported)
+  └─ BuildIndex([]SeqFactor) Index
+  └─ Lookup([]SeqFactor, id) (SeqFactor, bool)
 
 timeGroup (unexported)
   ├─ Time    time.Time
   └─ Factors []SeqFactor
 ```
 
-**Key asymmetry:** `AccumCore` and `Accum` share the same top-level fields (`IDs`, `Time`, `Store`) but are not related by embedding or interface. Callers must choose the right accumulation path upfront.
+Both `AccumCore` and `Accum` implement the `Accumulated` interface. `Accum` embeds `AccumCore`, so field access (`accum.Store`, `accum.IDs`) is promoted. Callers can write functions accepting `Accumulated` to work with either type.
 
 ---
 
@@ -92,17 +101,23 @@ Public API
 │       └─ Accumulate (per factor) → error on unknown Factor
 │
 ├─ AggregateByInterval(sequence, base, filter, step, intervalType) ([]Accum, error)
-│   └─ aggregate(..., &timeGrouping{...})
+│   └─ aggregate(..., &TimeGrouping{...})
 │       └─ groupByTime(filtered, grouping)
 │           └─ bucketStart(f.Time, grouping) → error on invalid grouping
-│               └─ timeGrouping.validate() → error
+│               └─ TimeGrouping.validate() → error
+│
+├─ AggregateByGrouping(sequence, base, filter, grouping TimeGrouping) ([]Accum, error)
+│   └─ aggregate(..., &grouping)
 │
 ├─ AccumulateSequence(sequence, base) ([]AccumCore, error)
 │   └─ accumulateSequence(sequence, base, nil)
 │       └─ groupByTime + Accumulate
 │
 ├─ AccumulateSequenceByInterval(sequence, base, step, intervalType) ([]AccumCore, error)
-│   └─ accumulateSequence(..., &timeGrouping{...})
+│   └─ accumulateSequence(..., &TimeGrouping{...})
+│
+├─ AccumulateSequenceByGrouping(sequence, base, grouping TimeGrouping) ([]AccumCore, error)
+│   └─ accumulateSequence(..., &grouping)
 │
 ├─ AccumulateByTag(sequence, base, tag) ([]AccumCore, error)
 │   └─ FilterByTag → AccumulateSequence
@@ -159,20 +174,20 @@ rentOnly, err := aggrett.AccumulateByTag(seq, 0, "rent")
 ### ~~5b. `timeGrouping.validate()` panics instead of returning errors~~ — Fixed
 `validate()` now returns `error`. `bucketStart` returns `(time.Time, error)`. The error propagates up through `groupByTime` → `accumulateSequence` / `aggregate` → all public interval-based functions, which now return errors.
 
-### 5c. Day bucket math is calendar-month-relative, not epoch-relative
-[timeseries.go:83-84](../timeseries.go#L83) — `IntervalDays` buckets are calculated as `((day-1)/step*step)+1` within the current month. A `step=3` bucket in January and February start fresh each month. Cross-month multi-day buckets do **not** form a global grid.
+### ~~5c. Day bucket math is calendar-month-relative, not epoch-relative~~ — Fixed
+`IntervalDays` now uses epoch-aligned integer division: days since Unix epoch divided by step gives a consistent global grid. A `step=3` bucket crossing a month boundary (e.g., Jan-31 and Feb-1) correctly lands in the same bucket.
 
-### 5d. Week bucket math resets at year boundary
-[timeseries.go:86-88](../timeseries.go#L86) — `IntervalWeeks` uses `YearDay`, so a 2-week bucket spanning Dec 31 → Jan 1 would split into two different buckets. ISO week numbering is not followed.
+### ~~5d. Week bucket math resets at year boundary~~ — Fixed
+`IntervalWeeks` now uses epoch-aligned integer division: days since Unix epoch divided by 7 gives stable week indices. A week bucket spanning Dec 31 → Jan 1 no longer splits.
 
 ### 5e. Month overflow in `CreateCycles` causes date drift
-[timeseries.go:100-107](../timeseries.go#L100) — Monthly cycles starting on the 31st drift: Jan-31 → Feb-29 → Mar-29 (not Mar-31). This is documented as "JS-like" but can be surprising. The drift is permanent — once clamped, subsequent months are computed from the clamped date.
+[timeseries.go](../timeseries.go) — Monthly cycles starting on the 31st drift: Jan-31 → Feb-29 → Mar-29 (not Mar-31). This is intentional ("JS-like" overflow clamping) and is documented in the `AddInterval` and `CreateCycles` doc comments. The drift is permanent once it begins.
 
-### 5f. `FindByID` is O(n)
-[factors.go:72](../factors.go#L72) — Linear scan over the full sequence. No indexing mechanism is provided; callers with large sequences bear the full cost.
+### ~~5f. `FindByID` is O(n)~~ — Mitigated
+An `Index` companion type has been added ([index.go](../index.go)). `BuildIndex([]SeqFactor)` builds a `map[string]int` in O(n); subsequent `Lookup` calls are O(1). The index includes stale-detection: if the slice is mutated after the index was built, `Lookup` returns `false` rather than a wrong result.
 
-### 5g. ID uniqueness is assumed but not enforced
-`InsertFactor` delegates ID generation to the caller via `genID func() string`. `UpdateFactor` silently matches only the first occurrence if IDs are duplicated (due to early `continue` logic). `RemoveFactor` will remove **all** factors with a matching ID from the set if duplicates exist.
+### ~~5g. ID uniqueness is assumed but not enforced~~ — Fixed
+`InsertFactor` now checks the generated ID against all existing IDs before inserting and returns an error if a duplicate is found.
 
 ### ~~5h. `timePtr` test helper is defined but never used~~ — Fixed
 Removed from `test_helpers_test.go`.
@@ -186,13 +201,13 @@ Removed from `test_helpers_test.go`.
 
 1. ~~**Return errors instead of panicking.**~~ **Done.** `Accumulate`, `bucketStart`, and `validate` now return errors. All public accumulation and aggregation functions return `(result, error)`. Factor validation is enforced at `InsertFactor` / `UpdateFactor`.
 
-2. **Expose `TimeGrouping` as a public type.** The `step int, intervalType IntervalType` pair is repeated in every interval-based function signature. A public `TimeGrouping` struct would allow callers to build it once and reuse, and simplify the API surface.
+2. ~~**Expose `TimeGrouping` as a public type.**~~ **Done.** `TimeGrouping` is now exported. `AccumulateSequenceByGrouping` and `AggregateByGrouping` accept it directly, letting callers build a grouping once and reuse it. The original `ByInterval` signatures are retained for convenience.
 
-3. **Unify result types.** `AccumCore` has fields `IDs`, `Time`, `Store`. `Accum` has all of those plus `Tags` and `Breakdown`. Either embed `AccumCore` inside `Accum`, or consolidate into one type with optional/zero-value breakdown. Currently callers are locked into one path early and cannot easily upgrade.
+3. ~~**Unify result types.**~~ **Done.** `Accum` now embeds `AccumCore`. All field accesses are promoted. Both types implement the `Accumulated` interface, enabling polymorphic code.
 
-4. **Consider an index structure.** For use cases with large sequences and frequent `FindByID` / `UpdateFactor` calls, a companion `Index` type (`map[string]*SeqFactor`) would allow O(1) access. The current immutable-slice model is simple but doesn't scale.
+4. ~~**Consider an index structure.**~~ **Done.** `Index` companion type added in [index.go](../index.go). O(1) lookup via `BuildIndex` + `Lookup`. Includes stale-detection.
 
-5. **Week/day bucketing should use epoch-based alignment.** The current calendar-relative bucketing for days and weeks creates surprising discontinuities at month/year boundaries. An epoch-aligned approach (e.g., days since Unix epoch divided by step) would produce consistent global buckets.
+5. ~~**Week/day bucketing should use epoch-based alignment.**~~ **Done.** See items 5c and 5d above.
 
 ---
 
@@ -202,25 +217,25 @@ Removed from `test_helpers_test.go`.
 
 2. **`SeqFactorUpdate` functional options** — the current pointer-fields pattern works but is verbose to construct. Functional options (`type FactorOption func(*SeqFactor)`) would be more idiomatic Go and easier to extend.
 
-3. **`Breakdown` map nil-safety** — accessing `accum.Breakdown["missing-tag"]` returns a zero `BreakdownEntry` with `nil` IDs and `Delta = 0`. Document this or provide a `Get(tag string) (BreakdownEntry, bool)` accessor to make absence explicit.
+3. ~~**`Breakdown` map nil-safety**~~ **Done.** `Breakdown.Get(tag string) (BreakdownEntry, bool)` added. Returns `false` for nil map or missing key, making absence explicit without a map lookup.
 
-4. **`fmt.Stringer` on `Factor` and `IntervalType`** — neither implements `String()`, so `fmt.Println(factor)` prints the underlying string value which happens to be readable, but it's coincidental. Implementing `Stringer` makes the intent explicit.
+4. ~~**`fmt.Stringer` on `Factor` and `IntervalType`**~~ **Done.** Both types now implement `String() string`, making their output in `fmt.Println` and error messages intentional.
 
-5. **`AccumCore` and `Accum` should share a common interface or embedding** — right now there is zero relationship between them in the type system. A reader of the API sees two unrelated result types with overlapping fields.
+5. ~~**`AccumCore` and `Accum` should share a common interface or embedding**~~ **Done.** `Accum` embeds `AccumCore`; both implement `Accumulated`. See item 6.3 above.
 
 ---
 
 ## 8. Improvement Points: Implementations
 
-1. **`InsertFactor` pre-allocation** ([factors.go:14-16](../factors.go#L14)) — creates a new slice of `cap = len+1`, copies, then appends. This is equivalent to `append(sequence, newElem)` on a copied slice. The explicit pre-allocation is clear but verbose; using `append(append([]SeqFactor{}, sequence...), newElem)` is idiomatic.
+1. ~~**`InsertFactor` pre-allocation**~~ **Done.** Simplified to `append(append([]SeqFactor{}, sequence...), newElem)` — idiomatic and equivalent.
 
 2. ~~**`tags` slice in `aggregate`**~~ **Done.** `tags` now uses `make([]string, 0, len(group.Factors))` matching the capacity hint already used for `ids`.
 
-3. **`GenerateTimeSeries` cannot pre-allocate** ([timeseries.go:133](../timeseries.go#L133)) — because month/year overflow clamping means consecutive intervals may land on the same date, the result count isn't knowable upfront. This is acceptable but worth documenting.
+3. ~~**`GenerateTimeSeries` cannot pre-allocate**~~ **Documented.** A doc comment on `GenerateTimeSeries` now explains why pre-allocation is not possible: month/year overflow clamping means consecutive intervals may produce the same date, making the final count unknowable upfront.
 
-4. **`groupByTime` appends unconditionally at end** ([sequence.go:58](../sequence.go#L58)) — `return append(groups, current)` is safe because the early-return guard ensures `current` is always populated when reached. However, the pattern diverges from typical "flush on boundary" loops and may confuse future maintainers.
+4. ~~**`groupByTime` appends unconditionally at end**~~ **Documented.** A comment at the final `append(groups, current)` explains that the empty-sequence guard above guarantees `current` is always populated at this point.
 
-5. **`lastDayOfPreviousMonth` preserves time-of-day** ([timeseries.go:118-129](../timeseries.go#L118)) — the clamped date keeps the original `Hour`, `Minute`, `Second`, `Nanosecond`. For `AddInterval`, this is intentional, but it makes the function less obviously a "date boundary" utility.
+5. ~~**`lastDayOfPreviousMonth` preserves time-of-day**~~ **Documented.** A doc comment on `lastDayOfPreviousMonth` clarifies that preserving time-of-day is intentional for `AddInterval` semantics.
 
 6. ~~**`RemoveByTag` alias**~~ **Done.** A `// Deprecated: Use ExcludeByTag instead.` comment has been added to `RemoveByTag`.
 
@@ -232,7 +247,7 @@ Removed from `test_helpers_test.go`.
 
 | Step | File | What to learn |
 |---|---|---|
-| 1 | `types.go` | Core vocabulary: `Factor`, `SeqFactor`, `Accum`, `Breakdown` |
+| 1 | `types.go` | Core vocabulary: `Factor`, `SeqFactor`, `Accum`, `AccumCore`, `Breakdown`, `Accumulated` |
 | 2 | `sequence.go` | Engine: `Accumulate`, `groupByTime`, `accumulateSequence` |
 | 3 | `aggregate.go` | Full pipeline with breakdown: how `Accum` is assembled |
 | 4 | `tags.go` | Tag filtering and tag-scoped accumulation |
@@ -242,8 +257,8 @@ Removed from `test_helpers_test.go`.
 ### Goals for Contributors
 
 - **Immutability contract:** Every function returns a new slice. Understand why `groupByTime` does a `copy` before sorting ([sequence.go:31-35](../sequence.go#L31)).
-- **Two result types:** Know when `AccumCore` (simple running total) vs `Accum` (with per-tag breakdown) is appropriate.
-- **Bucket alignment math:** Understand how `bucketStart` maps a timestamp to its bucket start for each `IntervalType`, especially the day/week edge cases.
+- **Two result types:** Know when `AccumCore` (simple running total) vs `Accum` (with per-tag breakdown) is appropriate. Both implement `Accumulated` and `Accum` embeds `AccumCore`.
+- **Bucket alignment math:** `bucketStart` uses epoch-aligned integer division for `IntervalDays` and `IntervalWeeks`, and calendar-relative logic for months/years. Understand the cross-month consistency guarantee for days/weeks.
 - **Overflow clamping:** Understand `addMonthsWithOverflowClamp` and why monthly cycles from the 31st drift.
 - **Error contract:** `Accumulate`, `bucketStart`, `InsertFactor`, and `UpdateFactor` return errors on invalid input. All public accumulation and aggregation functions propagate these errors.
 
@@ -253,9 +268,9 @@ Removed from `test_helpers_test.go`.
 
 | Category | Rating | Notes |
 |---|---|---|
-| Correctness | High | Well-tested; immutability enforced |
-| API clarity | Medium | Two result types; repeated `step/intervalType` params |
-| Error handling | **Medium** | **Panics replaced with errors throughout; Factor validated at insertion boundaries** |
-| Performance | Medium | O(n) find/update; no indexing |
-| Test coverage | High | All public functions covered with edge cases; error paths now tested |
-| Extensibility | Medium | Unexported `timeGrouping` limits reuse |
+| Correctness | High | Well-tested; immutability enforced; epoch-aligned day/week buckets |
+| API clarity | **High** | `TimeGrouping` exported; `ByGrouping` variants added; `Accumulated` interface unifies result types |
+| Error handling | **High** | Panics replaced with errors throughout; Factor validated at insertion boundaries |
+| Performance | **High** | O(1) lookup via `Index`; O(n) `FindByID` still available for one-off use |
+| Test coverage | High | All public functions covered; error paths, epoch bucket tests, interface tests added |
+| Extensibility | **High** | `TimeGrouping` exported; `Accumulated` interface; `Index` companion type |

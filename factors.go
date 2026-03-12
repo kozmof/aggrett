@@ -6,6 +6,8 @@ import (
 )
 
 // InsertFactor appends a new factor without mutating the original slice.
+// Returns an error if factor is invalid or if genID produces an ID that already
+// exists in the sequence.
 func InsertFactor(
 	sequence []SeqFactor,
 	tag string,
@@ -17,10 +19,15 @@ func InsertFactor(
 	if !factor.IsValid() {
 		return nil, fmt.Errorf("invalid factor %q", factor)
 	}
-	result := make([]SeqFactor, 0, len(sequence)+1)
-	result = append(result, sequence...)
-	result = append(result, SeqFactor{ID: genID(), Tag: tag, Time: timeValue, Value: value, Factor: factor})
-	return result, nil
+	newID := genID()
+	for _, f := range sequence {
+		if f.ID == newID {
+			return nil, fmt.Errorf("duplicate ID %q: ensure genID produces unique values", newID)
+		}
+	}
+	return append(append([]SeqFactor{}, sequence...), SeqFactor{
+		ID: newID, Tag: tag, Time: timeValue, Value: value, Factor: factor,
+	}), nil
 }
 
 // RemoveFactor removes factors by IDs.
@@ -78,6 +85,7 @@ func UpdateFactor(sequence []SeqFactor, id string, fields SeqFactorUpdate) ([]Se
 }
 
 // FindByID returns the first factor with the given ID and true, or a zero value and false.
+// For large sequences with frequent lookups, consider building an Index for O(1) access.
 func FindByID(sequence []SeqFactor, id string) (SeqFactor, bool) {
 	for _, f := range sequence {
 		if f.ID == id {

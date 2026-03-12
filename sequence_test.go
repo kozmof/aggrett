@@ -261,4 +261,69 @@ func TestAccumulateSequenceByInterval(t *testing.T) {
 			t.Fatalf("expected error for invalid interval type")
 		}
 	})
+
+	t.Run("step=3 days: Jan-31 and Feb-1 land in same epoch-aligned bucket", func(t *testing.T) {
+		sequence := []SeqFactor{
+			{ID: "1", Tag: "a", Time: mustParseDate(t, "2024-01-31"), Factor: FactorPlus, Value: 10},
+			{ID: "2", Tag: "a", Time: mustParseDate(t, "2024-02-01"), Factor: FactorPlus, Value: 5},
+		}
+		result, err := AccumulateSequenceByInterval(sequence, 0, 3, IntervalDays)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(result) != 1 {
+			t.Fatalf("got %d buckets want 1 (both dates should share an epoch-aligned bucket)", len(result))
+		}
+		if result[0].Store != 15 {
+			t.Fatalf("got store %v want 15", result[0].Store)
+		}
+	})
+
+	t.Run("step=7 days: consistent bucketing across month boundary", func(t *testing.T) {
+		sequence := []SeqFactor{
+			{ID: "1", Tag: "a", Time: mustParseDate(t, "2024-01-28"), Factor: FactorPlus, Value: 10},
+			{ID: "2", Tag: "a", Time: mustParseDate(t, "2024-02-04"), Factor: FactorPlus, Value: 5},
+		}
+		// 2024-01-28 and 2024-02-04 are exactly 7 days apart — different buckets.
+		result, err := AccumulateSequenceByInterval(sequence, 0, 7, IntervalDays)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(result) != 2 {
+			t.Fatalf("got %d buckets want 2", len(result))
+		}
+	})
+}
+
+func TestAccumulateSequenceByGrouping(t *testing.T) {
+	sequence := []SeqFactor{
+		{ID: "1", Tag: "a", Time: mustParseDate(t, "2024-01-01"), Factor: FactorPlus, Value: 10},
+		{ID: "2", Tag: "a", Time: mustParseDate(t, "2024-04-01"), Factor: FactorMinus, Value: 3},
+	}
+
+	t.Run("produces same result as AccumulateSequenceByInterval", func(t *testing.T) {
+		byInterval, err := AccumulateSequenceByInterval(sequence, 0, 3, IntervalMonths)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		byGrouping, err := AccumulateSequenceByGrouping(sequence, 0, TimeGrouping{Step: 3, IntervalType: IntervalMonths})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(byInterval) != len(byGrouping) {
+			t.Fatalf("length mismatch: byInterval=%d byGrouping=%d", len(byInterval), len(byGrouping))
+		}
+		for i := range byInterval {
+			if byInterval[i].Store != byGrouping[i].Store {
+				t.Fatalf("store mismatch at [%d]", i)
+			}
+		}
+	})
+
+	t.Run("returns error for invalid grouping", func(t *testing.T) {
+		_, err := AccumulateSequenceByGrouping(sequence, 0, TimeGrouping{Step: -1, IntervalType: IntervalDays})
+		if err == nil {
+			t.Fatalf("expected error for negative step")
+		}
+	})
 }

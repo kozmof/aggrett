@@ -18,22 +18,8 @@ const (
 	IntervalYears   IntervalType = "years"
 )
 
-// timeGrouping describes interval-based bucketing for accumulation and aggregation.
-// Result times are the start of each bucket.
-type timeGrouping struct {
-	Step         int
-	IntervalType IntervalType
-}
-
-func (g timeGrouping) validate() error {
-	if g.Step <= 0 {
-		return fmt.Errorf("grouping step must be positive: %d", g.Step)
-	}
-	if !g.IntervalType.IsValid() {
-		return fmt.Errorf("unknown interval type: %q", g.IntervalType)
-	}
-	return nil
-}
+// String implements fmt.Stringer.
+func (t IntervalType) String() string { return string(t) }
 
 // IsValid reports whether t is a known IntervalType.
 func (t IntervalType) IsValid() bool {
@@ -45,7 +31,30 @@ func (t IntervalType) IsValid() bool {
 	return false
 }
 
-// AddInterval adds an interval to a date with JS-like month/year overflow behavior.
+// TimeGrouping describes an interval step and unit for bucket-based operations.
+// Result times are the start of each bucket.
+type TimeGrouping struct {
+	Step         int
+	IntervalType IntervalType
+}
+
+func (g TimeGrouping) validate() error {
+	if g.Step <= 0 {
+		return fmt.Errorf("grouping step must be positive: %d", g.Step)
+	}
+	if !g.IntervalType.IsValid() {
+		return fmt.Errorf("unknown interval type: %q", g.IntervalType)
+	}
+	return nil
+}
+
+// AddInterval adds step units of intervalType to date.
+//
+// For IntervalMonths and IntervalYears, overflow is clamped to the last day of the
+// target month using JS-like semantics: if the source day does not exist in the
+// target month, the result is the last valid day of that month. The clamped day
+// becomes the anchor for subsequent steps, so monthly cycles starting on the 31st
+// will drift permanently (e.g. Jan-31 → Feb-29 → Mar-29, not Mar-31).
 func AddInterval(date time.Time, step int, intervalType IntervalType) time.Time {
 	switch intervalType {
 	case IntervalSeconds:
@@ -67,7 +76,12 @@ func AddInterval(date time.Time, step int, intervalType IntervalType) time.Time 
 	}
 }
 
-func bucketStart(date time.Time, grouping timeGrouping) (time.Time, error) {
+// bucketStart returns the start of the bucket that date falls into for the given grouping.
+//
+// IntervalDays and IntervalWeeks use epoch-aligned buckets (anchored at 1970-01-01 UTC
+// in the date's location) so that bucket boundaries are consistent across month and
+// year boundaries regardless of step size.
+func bucketStart(date time.Time, grouping TimeGrouping) (time.Time, error) {
 	if err := grouping.validate(); err != nil {
 		return time.Time{}, err
 	}
@@ -83,12 +97,17 @@ func bucketStart(date time.Time, grouping timeGrouping) (time.Time, error) {
 		hour := date.Hour() - date.Hour()%grouping.Step
 		return time.Date(date.Year(), date.Month(), date.Day(), hour, 0, 0, 0, date.Location()), nil
 	case IntervalDays:
-		day := ((date.Day() - 1) / grouping.Step * grouping.Step) + 1
-		return time.Date(date.Year(), date.Month(), day, 0, 0, 0, 0, date.Location()), nil
+		epoch := time.Date(1970, 1, 1, 0, 0, 0, 0, date.Location())
+		daysSinceEpoch := int(date.Sub(epoch) / (24 * time.Hour))
+		bucketDay := (daysSinceEpoch / grouping.Step) * grouping.Step
+		s := epoch.AddDate(0, 0, bucketDay)
+		return time.Date(s.Year(), s.Month(), s.Day(), 0, 0, 0, 0, date.Location()), nil
 	case IntervalWeeks:
-		offset := ((date.YearDay() - 1) / (grouping.Step * 7)) * grouping.Step * 7
-		start := time.Date(date.Year(), time.January, 1, 0, 0, 0, 0, date.Location())
-		return start.AddDate(0, 0, offset), nil
+		epoch := time.Date(1970, 1, 1, 0, 0, 0, 0, date.Location())
+		daysSinceEpoch := int(date.Sub(epoch) / (24 * time.Hour))
+		bucketWeek := (daysSinceEpoch / 7 / grouping.Step) * grouping.Step
+		s := epoch.AddDate(0, 0, bucketWeek*7)
+		return time.Date(s.Year(), s.Month(), s.Day(), 0, 0, 0, 0, date.Location()), nil
 	case IntervalMonths:
 		month := ((int(date.Month()) - 1) / grouping.Step * grouping.Step) + 1
 		return time.Date(date.Year(), time.Month(month), 1, 0, 0, 0, 0, date.Location()), nil
@@ -118,6 +137,9 @@ func addYearsWithOverflowClamp(date time.Time, step int) time.Time {
 	return candidate
 }
 
+// lastDayOfPreviousMonth returns the last day of the month preceding date.
+// The time-of-day (hour, minute, second, nanosecond) is preserved from the input
+// so that AddInterval results remain on the same wall-clock time within the prior month.
 func lastDayOfPreviousMonth(date time.Time) time.Time {
 	return time.Date(
 		date.Year(),
@@ -131,7 +153,12 @@ func lastDayOfPreviousMonth(date time.Time) time.Time {
 	).AddDate(0, 0, -1)
 }
 
-// GenerateTimeSeries creates a series from start to end (inclusive).
+// GenerateTimeSeries creates a series of times from start to end (inclusive) advancing
+// by step intervalType units at each step.
+//
+// The result slice cannot be pre-allocated: month and year intervals use overflow
+// clamping, so consecutive steps may land on the same date, making the final count
+// unknowable without iterating.
 func GenerateTimeSeries(start, end time.Time, step int, intervalType IntervalType) []time.Time {
 	series := make([]time.Time, 0)
 	current := start
@@ -154,6 +181,10 @@ func SliceByTimeRange(sequence []SeqFactor, start, end time.Time) []SeqFactor {
 }
 
 // CreateCycles creates repeated factors from start to end using a fixed interval.
+//
+// For IntervalMonths and IntervalYears, overflow clamping applies: a cycle starting
+// on the 31st will drift after the first short month (see AddInterval). This is
+// intentional JS-like behaviour.
 func CreateCycles(
 	start, end time.Time,
 	step int,

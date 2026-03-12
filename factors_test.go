@@ -57,6 +57,15 @@ func TestInsertFactor(t *testing.T) {
 			t.Fatalf("expected error for invalid factor")
 		}
 	})
+
+	t.Run("returns error when genID produces a duplicate ID", func(t *testing.T) {
+		seq := []SeqFactor{makeSeqFactor(t, "dup-id", "rent", "2024-01-01", 100, "")}
+		alwaysDup := func() string { return "dup-id" }
+		_, err := InsertFactor(seq, "food", mustParseDate(t, "2024-02-01"), 50, FactorPlus, alwaysDup)
+		if err == nil {
+			t.Fatalf("expected error for duplicate ID")
+		}
+	})
 }
 
 func TestRemoveFactor(t *testing.T) {

@@ -108,3 +108,90 @@ func TestAggregateByInterval(t *testing.T) {
 		}
 	})
 }
+
+func TestAggregateByGrouping(t *testing.T) {
+	sequence := []SeqFactor{
+		{ID: "1", Tag: "rent", Time: mustParseDate(t, "2024-01-15"), Factor: FactorPlus, Value: 10},
+		{ID: "2", Tag: "food", Time: mustParseDate(t, "2024-04-30"), Factor: FactorMinus, Value: 2},
+		{ID: "3", Tag: "rent", Time: mustParseDate(t, "2024-05-01"), Factor: FactorPlus, Value: 7},
+	}
+
+	t.Run("produces same result as AggregateByInterval", func(t *testing.T) {
+		byInterval, err := AggregateByInterval(sequence, 0, nil, 4, IntervalMonths)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		byGrouping, err := AggregateByGrouping(sequence, 0, nil, TimeGrouping{Step: 4, IntervalType: IntervalMonths})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(byInterval) != len(byGrouping) {
+			t.Fatalf("length mismatch: byInterval=%d byGrouping=%d", len(byInterval), len(byGrouping))
+		}
+		for i := range byInterval {
+			if byInterval[i].Store != byGrouping[i].Store {
+				t.Fatalf("store mismatch at [%d]: byInterval=%v byGrouping=%v", i, byInterval[i].Store, byGrouping[i].Store)
+			}
+		}
+	})
+
+	t.Run("returns error for invalid grouping", func(t *testing.T) {
+		_, err := AggregateByGrouping(sequence, 0, nil, TimeGrouping{Step: 0, IntervalType: IntervalMonths})
+		if err == nil {
+			t.Fatalf("expected error for step=0")
+		}
+	})
+}
+
+func TestBreakdownGet(t *testing.T) {
+	t.Run("returns entry and true for present tag", func(t *testing.T) {
+		b := Breakdown{"rent": {Delta: 100, IDs: []string{"1"}}}
+		e, ok := b.Get("rent")
+		if !ok || e.Delta != 100 || len(e.IDs) != 1 || e.IDs[0] != "1" {
+			t.Fatalf("unexpected result ok=%v entry=%#v", ok, e)
+		}
+	})
+
+	t.Run("returns zero value and false for missing tag", func(t *testing.T) {
+		b := Breakdown{"rent": {Delta: 100}}
+		e, ok := b.Get("food")
+		if ok || e.Delta != 0 || e.IDs != nil {
+			t.Fatalf("expected zero value and false, got ok=%v entry=%#v", ok, e)
+		}
+	})
+
+	t.Run("returns false for nil breakdown", func(t *testing.T) {
+		var b Breakdown
+		_, ok := b.Get("rent")
+		if ok {
+			t.Fatalf("expected false for nil breakdown")
+		}
+	})
+}
+
+func TestAccumulatedInterface(t *testing.T) {
+	// Verify both types satisfy the interface at runtime via a slice of Accumulated.
+	seq := []SeqFactor{
+		{ID: "1", Tag: "a", Time: mustParseDate(t, "2024-01-01"), Factor: FactorPlus, Value: 5},
+	}
+
+	core, err := AccumulateSequence(seq, 10)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	rich, err := Aggregate(seq, 10, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	items := []Accumulated{core[0], rich[0]}
+	for _, item := range items {
+		if item.GetStore() != 15 {
+			t.Fatalf("GetStore() got %v want 15", item.GetStore())
+		}
+		if len(item.GetIDs()) != 1 || item.GetIDs()[0] != "1" {
+			t.Fatalf("GetIDs() got %#v want [1]", item.GetIDs())
+		}
+		mustTimeEqual(t, item.GetTime(), mustParseDate(t, "2024-01-01"))
+	}
+}

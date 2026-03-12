@@ -350,3 +350,51 @@ func TestCreateCycles(t *testing.T) {
 		mustTimeEqual(t, result[2].Time, mustParseDate(t, "2026-02-28"))
 	})
 }
+
+func TestBucketStartDaysEpochAligned(t *testing.T) {
+	t.Run("step=3: Jan-31 and Feb-1 land in same bucket", func(t *testing.T) {
+		g := TimeGrouping{Step: 3, IntervalType: IntervalDays}
+		jan31, _ := bucketStart(mustParseDate(t, "2024-01-31"), g)
+		feb01, _ := bucketStart(mustParseDate(t, "2024-02-01"), g)
+		if !jan31.Equal(feb01) {
+			t.Fatalf("expected same bucket: jan31=%s feb01=%s", jan31, feb01)
+		}
+	})
+
+	t.Run("step=3: Jan-28 and Jan-31 land in different buckets", func(t *testing.T) {
+		g := TimeGrouping{Step: 3, IntervalType: IntervalDays}
+		jan28, _ := bucketStart(mustParseDate(t, "2024-01-28"), g)
+		jan31, _ := bucketStart(mustParseDate(t, "2024-01-31"), g)
+		if jan28.Equal(jan31) {
+			t.Fatalf("expected different buckets: both got %s", jan28)
+		}
+	})
+
+	t.Run("step=1: every day is its own bucket", func(t *testing.T) {
+		g := TimeGrouping{Step: 1, IntervalType: IntervalDays}
+		d1, _ := bucketStart(mustParseDate(t, "2024-01-31"), g)
+		d2, _ := bucketStart(mustParseDate(t, "2024-02-01"), g)
+		mustTimeEqual(t, d1, mustParseDate(t, "2024-01-31"))
+		mustTimeEqual(t, d2, mustParseDate(t, "2024-02-01"))
+	})
+}
+
+func TestBucketStartWeeksEpochAligned(t *testing.T) {
+	t.Run("step=1: Dec-31 and Jan-1 within same 7-day window share a bucket", func(t *testing.T) {
+		g := TimeGrouping{Step: 1, IntervalType: IntervalWeeks}
+		dec31, _ := bucketStart(mustParseDate(t, "2024-12-31"), g)
+		jan01, _ := bucketStart(mustParseDate(t, "2025-01-01"), g)
+		if !dec31.Equal(jan01) {
+			t.Fatalf("expected same bucket: dec31=%s jan01=%s", dec31, jan01)
+		}
+	})
+
+	t.Run("step=2: dates 14+ days apart land in different buckets", func(t *testing.T) {
+		g := TimeGrouping{Step: 2, IntervalType: IntervalWeeks}
+		d1, _ := bucketStart(mustParseDate(t, "2024-12-20"), g)
+		d2, _ := bucketStart(mustParseDate(t, "2025-01-03"), g)
+		if d1.Equal(d2) {
+			t.Fatalf("expected different buckets: both got %s", d1)
+		}
+	})
+}
