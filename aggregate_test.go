@@ -15,7 +15,10 @@ func TestAggregate(t *testing.T) {
 		{ID: "5", Tag: "other tag", Time: tomorrow, Factor: FactorMinus, Value: 5},
 	}
 
-	accum := Aggregate(sequence, 10, nil)
+	accum, err := Aggregate(sequence, 10, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if len(accum) != 3 {
 		t.Fatalf("got %d items want 3", len(accum))
 	}
@@ -66,7 +69,10 @@ func TestAggregateByInterval(t *testing.T) {
 		{ID: "5", Tag: "rent", Time: mustParseDate(t, "2024-09-01"), Factor: FactorMinus, Value: 3},
 	}
 
-	accum := AggregateByInterval(sequence, 0, nil, 4, IntervalMonths)
+	accum, err := AggregateByInterval(sequence, 0, nil, 4, IntervalMonths)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if len(accum) != 3 {
 		t.Fatalf("got %d items want 3", len(accum))
 	}
@@ -87,4 +93,18 @@ func TestAggregateByInterval(t *testing.T) {
 	if accum[2].Breakdown["rent"].Delta != -3 {
 		t.Fatalf("unexpected third breakdown %#v", accum[2].Breakdown)
 	}
+
+	t.Run("returns error for non-positive step", func(t *testing.T) {
+		_, err := AggregateByInterval(sequence, 0, nil, 0, IntervalMonths)
+		if err == nil {
+			t.Fatalf("expected error for step=0")
+		}
+	})
+
+	t.Run("returns error for invalid interval type", func(t *testing.T) {
+		_, err := AggregateByInterval(sequence, 0, nil, 1, IntervalType("bad"))
+		if err == nil {
+			t.Fatalf("expected error for invalid interval type")
+		}
+	})
 }

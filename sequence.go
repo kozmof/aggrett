@@ -12,21 +12,21 @@ type timeGroup struct {
 }
 
 // Accumulate applies a factor to a previous value.
-func Accumulate(factor Factor, prevValue, value float64) float64 {
+func Accumulate(factor Factor, prevValue, value float64) (float64, error) {
 	switch factor {
 	case FactorPlus:
-		return prevValue + value
+		return prevValue + value, nil
 	case FactorMinus:
-		return prevValue - value
+		return prevValue - value, nil
 	default:
-		panic(fmt.Sprintf("unknown factor type: %q", factor))
+		return 0, fmt.Errorf("unknown factor type: %q", factor)
 	}
 }
 
 // groupByTime copies sequence, sorts by time, and groups either exact timestamps or interval buckets.
-func groupByTime(sequence []SeqFactor, grouping *timeGrouping) []timeGroup {
+func groupByTime(sequence []SeqFactor, grouping *timeGrouping) ([]timeGroup, error) {
 	if len(sequence) == 0 {
-		return nil
+		return nil, nil
 	}
 	sorted := make([]SeqFactor, len(sequence))
 	copy(sorted, sequence)
@@ -39,7 +39,11 @@ func groupByTime(sequence []SeqFactor, grouping *timeGrouping) []timeGroup {
 	for _, f := range sorted {
 		groupTime := f.Time
 		if grouping != nil {
-			groupTime = bucketStart(f.Time, *grouping)
+			var err error
+			groupTime, err = bucketStart(f.Time, *grouping)
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		if len(current.Factors) == 0 {
@@ -55,27 +59,30 @@ func groupByTime(sequence []SeqFactor, grouping *timeGrouping) []timeGroup {
 		groups = append(groups, current)
 		current = timeGroup{Time: groupTime, Factors: []SeqFactor{f}}
 	}
-	return append(groups, current)
+	return append(groups, current), nil
 }
 
 // AccumulateSequence sorts by time and accumulates values into time buckets.
-func AccumulateSequence(sequence []SeqFactor, baseValue float64) []AccumCore {
+func AccumulateSequence(sequence []SeqFactor, baseValue float64) ([]AccumCore, error) {
 	return accumulateSequence(sequence, baseValue, nil)
 }
 
 // AccumulateSequenceByInterval sorts by time and accumulates values into interval buckets.
 // Result times are the start of each bucket.
-func AccumulateSequenceByInterval(sequence []SeqFactor, baseValue float64, step int, intervalType IntervalType) []AccumCore {
+func AccumulateSequenceByInterval(sequence []SeqFactor, baseValue float64, step int, intervalType IntervalType) ([]AccumCore, error) {
 	return accumulateSequence(sequence, baseValue, &timeGrouping{
 		Step:         step,
 		IntervalType: intervalType,
 	})
 }
 
-func accumulateSequence(sequence []SeqFactor, baseValue float64, grouping *timeGrouping) []AccumCore {
-	groups := groupByTime(sequence, grouping)
+func accumulateSequence(sequence []SeqFactor, baseValue float64, grouping *timeGrouping) ([]AccumCore, error) {
+	groups, err := groupByTime(sequence, grouping)
+	if err != nil {
+		return nil, err
+	}
 	if len(groups) == 0 {
-		return []AccumCore{}
+		return []AccumCore{}, nil
 	}
 
 	result := make([]AccumCore, 0, len(groups))
@@ -84,9 +91,12 @@ func accumulateSequence(sequence []SeqFactor, baseValue float64, grouping *timeG
 		ids := make([]string, 0, len(group.Factors))
 		for _, f := range group.Factors {
 			ids = append(ids, f.ID)
-			store = Accumulate(f.Factor, store, f.Value)
+			store, err = Accumulate(f.Factor, store, f.Value)
+			if err != nil {
+				return nil, err
+			}
 		}
 		result = append(result, AccumCore{IDs: ids, Time: group.Time, Store: store})
 	}
-	return result
+	return result, nil
 }

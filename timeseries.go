@@ -25,13 +25,14 @@ type timeGrouping struct {
 	IntervalType IntervalType
 }
 
-func (g timeGrouping) validate() {
+func (g timeGrouping) validate() error {
 	if g.Step <= 0 {
-		panic(fmt.Sprintf("grouping step must be positive: %d", g.Step))
+		return fmt.Errorf("grouping step must be positive: %d", g.Step)
 	}
 	if !g.IntervalType.IsValid() {
-		panic(fmt.Sprintf("unknown interval type: %q", g.IntervalType))
+		return fmt.Errorf("unknown interval type: %q", g.IntervalType)
 	}
+	return nil
 }
 
 // IsValid reports whether t is a known IntervalType.
@@ -66,34 +67,36 @@ func AddInterval(date time.Time, step int, intervalType IntervalType) time.Time 
 	}
 }
 
-func bucketStart(date time.Time, grouping timeGrouping) time.Time {
-	grouping.validate()
+func bucketStart(date time.Time, grouping timeGrouping) (time.Time, error) {
+	if err := grouping.validate(); err != nil {
+		return time.Time{}, err
+	}
 
 	switch grouping.IntervalType {
 	case IntervalSeconds:
 		second := date.Second() - date.Second()%grouping.Step
-		return time.Date(date.Year(), date.Month(), date.Day(), date.Hour(), date.Minute(), second, 0, date.Location())
+		return time.Date(date.Year(), date.Month(), date.Day(), date.Hour(), date.Minute(), second, 0, date.Location()), nil
 	case IntervalMinutes:
 		minute := date.Minute() - date.Minute()%grouping.Step
-		return time.Date(date.Year(), date.Month(), date.Day(), date.Hour(), minute, 0, 0, date.Location())
+		return time.Date(date.Year(), date.Month(), date.Day(), date.Hour(), minute, 0, 0, date.Location()), nil
 	case IntervalHours:
 		hour := date.Hour() - date.Hour()%grouping.Step
-		return time.Date(date.Year(), date.Month(), date.Day(), hour, 0, 0, 0, date.Location())
+		return time.Date(date.Year(), date.Month(), date.Day(), hour, 0, 0, 0, date.Location()), nil
 	case IntervalDays:
 		day := ((date.Day() - 1) / grouping.Step * grouping.Step) + 1
-		return time.Date(date.Year(), date.Month(), day, 0, 0, 0, 0, date.Location())
+		return time.Date(date.Year(), date.Month(), day, 0, 0, 0, 0, date.Location()), nil
 	case IntervalWeeks:
 		offset := ((date.YearDay() - 1) / (grouping.Step * 7)) * grouping.Step * 7
 		start := time.Date(date.Year(), time.January, 1, 0, 0, 0, 0, date.Location())
-		return start.AddDate(0, 0, offset)
+		return start.AddDate(0, 0, offset), nil
 	case IntervalMonths:
 		month := ((int(date.Month()) - 1) / grouping.Step * grouping.Step) + 1
-		return time.Date(date.Year(), time.Month(month), 1, 0, 0, 0, 0, date.Location())
+		return time.Date(date.Year(), time.Month(month), 1, 0, 0, 0, 0, date.Location()), nil
 	case IntervalYears:
 		year := ((date.Year() - 1) / grouping.Step * grouping.Step) + 1
-		return time.Date(year, time.January, 1, 0, 0, 0, 0, date.Location())
+		return time.Date(year, time.January, 1, 0, 0, 0, 0, date.Location()), nil
 	default:
-		panic(fmt.Sprintf("unknown interval type: %q", grouping.IntervalType))
+		return time.Time{}, fmt.Errorf("unknown interval type: %q", grouping.IntervalType)
 	}
 }
 

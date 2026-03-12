@@ -56,6 +56,8 @@ func ExcludeByTag(sequence []SeqFactor, tags []string) []SeqFactor {
 }
 
 // RemoveByTag is an alias of ExcludeByTag.
+//
+// Deprecated: Use ExcludeByTag instead. RemoveByTag will be removed in a future version.
 func RemoveByTag(sequence []SeqFactor, tags []string) []SeqFactor {
 	return ExcludeByTag(sequence, tags)
 }
@@ -73,12 +75,12 @@ func RenameTag(sequence []SeqFactor, oldTag, newTag string) []SeqFactor {
 }
 
 // AccumulateByTag accumulates only factors with the given tag.
-func AccumulateByTag(sequence []SeqFactor, baseValue float64, tag string) []AccumCore {
+func AccumulateByTag(sequence []SeqFactor, baseValue float64, tag string) ([]AccumCore, error) {
 	return AccumulateSequence(FilterByTag(sequence, []string{tag}), baseValue)
 }
 
 // AccumulateByTagByInterval accumulates factors for a tag into interval buckets.
 // Result times are the start of each bucket.
-func AccumulateByTagByInterval(sequence []SeqFactor, baseValue float64, tag string, step int, intervalType IntervalType) []AccumCore {
+func AccumulateByTagByInterval(sequence []SeqFactor, baseValue float64, tag string, step int, intervalType IntervalType) ([]AccumCore, error) {
 	return AccumulateSequenceByInterval(FilterByTag(sequence, []string{tag}), baseValue, step, intervalType)
 }

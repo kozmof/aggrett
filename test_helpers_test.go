@@ -34,4 +34,11 @@ func floatPtr(v float64) *float64 { return &v }
 
 func factorPtr(v Factor) *Factor { return &v }
 
-func timePtr(v time.Time) *time.Time { return &v }
+func makeSeqFactor(t *testing.T, id, tag, timeValue string, value float64, factor Factor) SeqFactor {
+	t.Helper()
+	if factor == "" {
+		factor = FactorPlus
+	}
+	return SeqFactor{ID: id, Tag: tag, Time: mustParseDate(t, timeValue), Value: value, Factor: factor}
+}
+

@@ -5,22 +5,14 @@ import (
 	"testing"
 )
 
-func makeTagFactor(t *testing.T, id, tag, timeValue string, value float64, factor Factor) SeqFactor {
-	t.Helper()
-	if factor == "" {
-		factor = FactorPlus
-	}
-	return SeqFactor{ID: id, Tag: tag, Time: mustParseDate(t, timeValue), Value: value, Factor: factor}
-}
-
 func TestFilterByTag(t *testing.T) {
 	seq := []SeqFactor{
-		makeTagFactor(t, "1", "rent", "2024-01-01", 1000, FactorMinus),
-		makeTagFactor(t, "2", "food", "2024-01-05", 200, FactorMinus),
-		makeTagFactor(t, "3", "salary", "2024-01-10", 5000, FactorPlus),
-		makeTagFactor(t, "4", "food", "2024-01-15", 150, FactorMinus),
-		makeTagFactor(t, "5", "utilities", "2024-01-20", 100, FactorMinus),
-		makeTagFactor(t, "6", "rent", "2024-02-01", 1000, FactorMinus),
+		makeSeqFactor(t, "1", "rent", "2024-01-01", 1000, FactorMinus),
+		makeSeqFactor(t, "2", "food", "2024-01-05", 200, FactorMinus),
+		makeSeqFactor(t, "3", "salary", "2024-01-10", 5000, FactorPlus),
+		makeSeqFactor(t, "4", "food", "2024-01-15", 150, FactorMinus),
+		makeSeqFactor(t, "5", "utilities", "2024-01-20", 100, FactorMinus),
+		makeSeqFactor(t, "6", "rent", "2024-02-01", 1000, FactorMinus),
 	}
 
 	t.Run("filters to matching tags", func(t *testing.T) {
@@ -64,12 +56,12 @@ func TestFilterByTag(t *testing.T) {
 
 func TestExtractTags(t *testing.T) {
 	seq := []SeqFactor{
-		makeTagFactor(t, "1", "rent", "2024-01-01", 1000, FactorMinus),
-		makeTagFactor(t, "2", "food", "2024-01-05", 200, FactorMinus),
-		makeTagFactor(t, "3", "salary", "2024-01-10", 5000, FactorPlus),
-		makeTagFactor(t, "4", "food", "2024-01-15", 150, FactorMinus),
-		makeTagFactor(t, "5", "utilities", "2024-01-20", 100, FactorMinus),
-		makeTagFactor(t, "6", "rent", "2024-02-01", 1000, FactorMinus),
+		makeSeqFactor(t, "1", "rent", "2024-01-01", 1000, FactorMinus),
+		makeSeqFactor(t, "2", "food", "2024-01-05", 200, FactorMinus),
+		makeSeqFactor(t, "3", "salary", "2024-01-10", 5000, FactorPlus),
+		makeSeqFactor(t, "4", "food", "2024-01-15", 150, FactorMinus),
+		makeSeqFactor(t, "5", "utilities", "2024-01-20", 100, FactorMinus),
+		makeSeqFactor(t, "6", "rent", "2024-02-01", 1000, FactorMinus),
 	}
 
 	t.Run("returns unique tags", func(t *testing.T) {
@@ -90,8 +82,8 @@ func TestExtractTags(t *testing.T) {
 
 	t.Run("returns single tag when all items share it", func(t *testing.T) {
 		uniform := []SeqFactor{
-			makeTagFactor(t, "1", "rent", "2024-01-01", 100, ""),
-			makeTagFactor(t, "2", "rent", "2024-02-01", 100, ""),
+			makeSeqFactor(t, "1", "rent", "2024-01-01", 100, ""),
+			makeSeqFactor(t, "2", "rent", "2024-02-01", 100, ""),
 		}
 		tags := ExtractTags(uniform)
 		if !reflect.DeepEqual(tags, []string{"rent"}) {
@@ -102,12 +94,12 @@ func TestExtractTags(t *testing.T) {
 
 func TestGroupByTag(t *testing.T) {
 	seq := []SeqFactor{
-		makeTagFactor(t, "1", "rent", "2024-01-01", 1000, FactorMinus),
-		makeTagFactor(t, "2", "food", "2024-01-05", 200, FactorMinus),
-		makeTagFactor(t, "3", "salary", "2024-01-10", 5000, FactorPlus),
-		makeTagFactor(t, "4", "food", "2024-01-15", 150, FactorMinus),
-		makeTagFactor(t, "5", "utilities", "2024-01-20", 100, FactorMinus),
-		makeTagFactor(t, "6", "rent", "2024-02-01", 1000, FactorMinus),
+		makeSeqFactor(t, "1", "rent", "2024-01-01", 1000, FactorMinus),
+		makeSeqFactor(t, "2", "food", "2024-01-05", 200, FactorMinus),
+		makeSeqFactor(t, "3", "salary", "2024-01-10", 5000, FactorPlus),
+		makeSeqFactor(t, "4", "food", "2024-01-15", 150, FactorMinus),
+		makeSeqFactor(t, "5", "utilities", "2024-01-20", 100, FactorMinus),
+		makeSeqFactor(t, "6", "rent", "2024-02-01", 1000, FactorMinus),
 	}
 
 	t.Run("groups factors by tag", func(t *testing.T) {
@@ -137,12 +129,12 @@ func TestGroupByTag(t *testing.T) {
 
 func TestExcludeByTag(t *testing.T) {
 	seq := []SeqFactor{
-		makeTagFactor(t, "1", "rent", "2024-01-01", 1000, FactorMinus),
-		makeTagFactor(t, "2", "food", "2024-01-05", 200, FactorMinus),
-		makeTagFactor(t, "3", "salary", "2024-01-10", 5000, FactorPlus),
-		makeTagFactor(t, "4", "food", "2024-01-15", 150, FactorMinus),
-		makeTagFactor(t, "5", "utilities", "2024-01-20", 100, FactorMinus),
-		makeTagFactor(t, "6", "rent", "2024-02-01", 1000, FactorMinus),
+		makeSeqFactor(t, "1", "rent", "2024-01-01", 1000, FactorMinus),
+		makeSeqFactor(t, "2", "food", "2024-01-05", 200, FactorMinus),
+		makeSeqFactor(t, "3", "salary", "2024-01-10", 5000, FactorPlus),
+		makeSeqFactor(t, "4", "food", "2024-01-15", 150, FactorMinus),
+		makeSeqFactor(t, "5", "utilities", "2024-01-20", 100, FactorMinus),
+		makeSeqFactor(t, "6", "rent", "2024-02-01", 1000, FactorMinus),
 	}
 
 	t.Run("excludes matching tags", func(t *testing.T) {
@@ -187,9 +179,9 @@ func TestExcludeByTag(t *testing.T) {
 
 func TestRemoveByTag(t *testing.T) {
 	seq := []SeqFactor{
-		makeTagFactor(t, "1", "rent", "2024-01-01", 1000, FactorMinus),
-		makeTagFactor(t, "2", "food", "2024-01-05", 200, FactorMinus),
-		makeTagFactor(t, "3", "salary", "2024-01-10", 5000, FactorPlus),
+		makeSeqFactor(t, "1", "rent", "2024-01-01", 1000, FactorMinus),
+		makeSeqFactor(t, "2", "food", "2024-01-05", 200, FactorMinus),
+		makeSeqFactor(t, "3", "salary", "2024-01-10", 5000, FactorPlus),
 	}
 
 	excluded := ExcludeByTag(seq, []string{"food", "rent"})
@@ -201,12 +193,12 @@ func TestRemoveByTag(t *testing.T) {
 
 func TestRenameTag(t *testing.T) {
 	seq := []SeqFactor{
-		makeTagFactor(t, "1", "rent", "2024-01-01", 1000, FactorMinus),
-		makeTagFactor(t, "2", "food", "2024-01-05", 200, FactorMinus),
-		makeTagFactor(t, "3", "salary", "2024-01-10", 5000, FactorPlus),
-		makeTagFactor(t, "4", "food", "2024-01-15", 150, FactorMinus),
-		makeTagFactor(t, "5", "utilities", "2024-01-20", 100, FactorMinus),
-		makeTagFactor(t, "6", "rent", "2024-02-01", 1000, FactorMinus),
+		makeSeqFactor(t, "1", "rent", "2024-01-01", 1000, FactorMinus),
+		makeSeqFactor(t, "2", "food", "2024-01-05", 200, FactorMinus),
+		makeSeqFactor(t, "3", "salary", "2024-01-10", 5000, FactorPlus),
+		makeSeqFactor(t, "4", "food", "2024-01-15", 150, FactorMinus),
+		makeSeqFactor(t, "5", "utilities", "2024-01-20", 100, FactorMinus),
+		makeSeqFactor(t, "6", "rent", "2024-02-01", 1000, FactorMinus),
 	}
 
 	t.Run("renames all matching factors", func(t *testing.T) {
@@ -272,37 +264,49 @@ func TestRenameTag(t *testing.T) {
 
 func TestAccumulateByTag(t *testing.T) {
 	seq := []SeqFactor{
-		makeTagFactor(t, "1", "rent", "2024-01-01", 1000, FactorMinus),
-		makeTagFactor(t, "2", "food", "2024-01-05", 200, FactorMinus),
-		makeTagFactor(t, "3", "salary", "2024-01-10", 5000, FactorPlus),
-		makeTagFactor(t, "4", "food", "2024-01-15", 150, FactorMinus),
-		makeTagFactor(t, "5", "utilities", "2024-01-20", 100, FactorMinus),
-		makeTagFactor(t, "6", "rent", "2024-02-01", 1000, FactorMinus),
+		makeSeqFactor(t, "1", "rent", "2024-01-01", 1000, FactorMinus),
+		makeSeqFactor(t, "2", "food", "2024-01-05", 200, FactorMinus),
+		makeSeqFactor(t, "3", "salary", "2024-01-10", 5000, FactorPlus),
+		makeSeqFactor(t, "4", "food", "2024-01-15", 150, FactorMinus),
+		makeSeqFactor(t, "5", "utilities", "2024-01-20", 100, FactorMinus),
+		makeSeqFactor(t, "6", "rent", "2024-02-01", 1000, FactorMinus),
 	}
 
 	t.Run("accumulates only the specified tag", func(t *testing.T) {
-		result := AccumulateByTag(seq, 0, "food")
+		result, err := AccumulateByTag(seq, 0, "food")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 		if len(result) != 2 || result[0].Store != -200 || result[1].Store != -350 {
 			t.Fatalf("unexpected result %#v", result)
 		}
 	})
 
 	t.Run("returns empty array when tag not found", func(t *testing.T) {
-		result := AccumulateByTag(seq, 0, "nonexistent")
+		result, err := AccumulateByTag(seq, 0, "nonexistent")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 		if len(result) != 0 {
 			t.Fatalf("expected empty result")
 		}
 	})
 
 	t.Run("applies base value", func(t *testing.T) {
-		result := AccumulateByTag(seq, 1000, "rent")
+		result, err := AccumulateByTag(seq, 1000, "rent")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 		if len(result) != 2 || result[0].Store != 0 || result[1].Store != -1000 {
 			t.Fatalf("unexpected result %#v", result)
 		}
 	})
 
 	t.Run("returns empty array for empty sequence", func(t *testing.T) {
-		result := AccumulateByTag(nil, 0, "food")
+		result, err := AccumulateByTag(nil, 0, "food")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 		if len(result) != 0 {
 			t.Fatalf("expected empty result")
 		}
@@ -311,13 +315,16 @@ func TestAccumulateByTag(t *testing.T) {
 
 func TestAccumulateByTagByInterval(t *testing.T) {
 	seq := []SeqFactor{
-		makeTagFactor(t, "1", "food", "2024-01-05T10:00:00", 200, FactorMinus),
-		makeTagFactor(t, "2", "food", "2024-01-05T18:00:00", 50, FactorMinus),
-		makeTagFactor(t, "3", "rent", "2024-01-05T12:00:00", 1000, FactorMinus),
-		makeTagFactor(t, "4", "food", "2024-01-06T09:00:00", 25, FactorMinus),
+		makeSeqFactor(t, "1", "food", "2024-01-05T10:00:00", 200, FactorMinus),
+		makeSeqFactor(t, "2", "food", "2024-01-05T18:00:00", 50, FactorMinus),
+		makeSeqFactor(t, "3", "rent", "2024-01-05T12:00:00", 1000, FactorMinus),
+		makeSeqFactor(t, "4", "food", "2024-01-06T09:00:00", 25, FactorMinus),
 	}
 
-	result := AccumulateByTagByInterval(seq, 0, "food", 1, IntervalDays)
+	result, err := AccumulateByTagByInterval(seq, 0, "food", 1, IntervalDays)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if len(result) != 2 {
 		t.Fatalf("got %d items want 2", len(result))
 	}
